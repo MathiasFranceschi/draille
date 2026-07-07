@@ -79,12 +79,19 @@ def main(argv):
         if home_dir is None:
             sys.stderr.write("warn: scope %r has no home in scopes.json -> parked in central\n" % scope)
             home_dir = homes.get("central", ".")
-        # scopes.json may come from a cloned (untrusted) repo — never let a home
-        # escape the root (absolute path or .. component = arbitrary-write primitive)
-        if os.path.isabs(home_dir) or os.pardir in home_dir.replace("\\", "/").split("/"):
-            sys.stderr.write("error: unsafe home %r in scopes.json (absolute or ..)\n" % home_dir)
-            return 2
+        # scopes.json may come from a cloned (untrusted) repo — the resolved base
+        # must stay inside root. realpath normalizes .., absolute/rooted/drive-
+        # relative paths, and symlinks; a different Windows drive raises ValueError
+        # in commonpath → also unsafe. (isabs alone misses /-rooted homes on Windows.)
         base = os.path.join(root, home_dir, "memory")
+        root_r = os.path.realpath(root)
+        try:
+            contained = os.path.commonpath([root_r, os.path.realpath(base)]) == root_r
+        except ValueError:
+            contained = False
+        if not contained:
+            sys.stderr.write("error: unsafe home %r in scopes.json (escapes memory root)\n" % home_dir)
+            return 2
     else:
         # mono-project mode: one memory store at the root of the repo
         scope = scope or os.path.basename(root)

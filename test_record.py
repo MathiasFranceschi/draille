@@ -107,13 +107,18 @@ with tempfile.TemporaryDirectory() as tmp:
     root = os.path.join(tmp, "root")
     os.makedirs(os.path.join(root, "memory"))
     env = env_for(root)
+    # absolute home = os-appropriate (POSIX /..., Windows C:\...); rooted-no-drive
+    # "/esc" is the Windows-3.13 isabs blind spot the realpath guard must still catch.
+    abs_home = os.path.join(os.path.abspath(os.sep), "abs-evil")
     with open(os.path.join(root, "memory", "scopes.json"), "w") as f:
-        json.dump({"sport": "../outside", "central": "/tmp/abs-evil"}, f)
+        json.dump({"sport": "../outside", "central": abs_home, "rooted": "/esc"}, f)
     r1 = run([REC, "decision", "tactical", "traversal rec", "--scope", "sport"], env)
     ok(r1.returncode == 2, "security: '..' home in scopes.json -> exit 2")
     ok(not os.path.exists(os.path.join(tmp, "outside")), "security: nothing written outside root")
     r2 = run([REC, "decision", "tactical", "abs rec", "--scope", "ghost"], env)  # parks in central
     ok(r2.returncode == 2, "security: absolute home (via central park) -> exit 2")
+    r3 = run([REC, "decision", "tactical", "rooted rec", "--scope", "rooted"], env)
+    ok(r3.returncode == 2, "security: rooted-no-drive home '/esc' -> exit 2 (Windows isabs blind spot)")
 
 # --- invalid scopes.json -> exit 2 ---
 with tempfile.TemporaryDirectory() as tmp:

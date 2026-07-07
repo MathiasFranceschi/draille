@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-07-07
+
+### Fixed
+
+- Windows: the scopes.json containment guard used `os.path.isabs`, which on
+  Python 3.13+ returns False for a rooted-but-driveless home like `/esc` — so a
+  hostile scopes.json could still escape the memory root on Windows. Replaced
+  with a realpath + commonpath containment check (platform-agnostic; also covers
+  drive-relative and cross-drive paths). CI matrix now green on Windows.
+
 ## [1.1.0] - 2026-07-07
 
 ### Added
@@ -68,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Record filenames are derived from a slugged, normalized title, preventing
   path or shell injection through user-supplied titles.
 
+[1.1.1]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.1.1
 [1.1.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.1.0
 [1.0.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.0.0
 [0.1.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v0.1.0
