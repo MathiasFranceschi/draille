@@ -22,17 +22,25 @@ builtin scan:
 - **stdout/stderr**: yours to format however you like; draille doesn't parse
   them, it just forwards the child's exit code.
 
-## Example: a semantic engine
+## Live example: `adapters/search/`
+
+[`adapters/search/`](../adapters/search/) has a real, runnable backend —
+[`ripgrep.sh`](../adapters/search/ripgrep.sh), a ~20-line portable lexical
+engine (ripgrep if installed, `grep -r` fallback, no other deps) — plus a
+[README](../adapters/search/README.md) with the actual command and captured
+output. Point at it the same way:
 
 ```bash
-export DRAILLE_SEARCH_CMD="qmd search"
+export DRAILLE_SEARCH_CMD="adapters/search/ripgrep.sh"
 draille search "why did the migration fail"
 ```
 
-This runs `qmd search "why did the migration fail"` with `MEMORY_ROOT` set,
-and returns whatever `qmd` prints and exits with. Any CLI that reads
-`$MEMORY_ROOT` and accepts free-text args as its query works the same way —
-`qmd` is just one example, not a dependency of draille.
+Any CLI that reads `$MEMORY_ROOT` and accepts free-text args as its query
+works the same way — `ripgrep.sh` is one concrete example, not a dependency
+of draille. The same contract covers semantic/embeddings/vector engines too:
+a hand-rolled index, a `sqlite-vec` wrapper, a hosted vector search API —
+draille doesn't know or care what's behind the command, only that it reads
+`$MEMORY_ROOT` and takes query terms as args.
 
 ## `--engine`
 

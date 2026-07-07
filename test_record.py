@@ -162,5 +162,19 @@ with tempfile.TemporaryDirectory() as tmp:
     ptxt = open(os.path.join(dir_, "records", pf)).read()
     ok("~/somedir/file.ts" in ptxt and abs_p not in ptxt, "--dir escape: absolute $HOME path normalized to ~/")
 
+# --- supersession: --supersedes X writes supersedes: X in frontmatter ---
+with tempfile.TemporaryDirectory() as tmp:
+    env = env_for(tmp)
+    r = run([REC, "decision", "foundational", "newer record", "--supersedes", "old-id-abc123"], env)
+    ok(r.returncode == 0, "supersedes: record exit 0")
+    rdir = os.path.join(tmp, "memory", "records")
+    txt = open(os.path.join(rdir, os.listdir(rdir)[0])).read()
+    ok("supersedes: old-id-abc123" in txt, "supersedes: frontmatter line written")
+
+    r2 = run([REC, "decision", "foundational", "no supersede here"], env)
+    files = [f for f in os.listdir(rdir) if r2.stdout.strip() in f]
+    txt2 = open(os.path.join(rdir, files[0])).read()
+    ok("supersedes:" not in txt2, "no --supersedes: no supersedes line written")
+
 print("record tests: %d passed, %d failed" % (res["p"], res["f"]))
 sys.exit(0 if res["f"] == 0 else 1)

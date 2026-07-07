@@ -6,7 +6,9 @@ and body (x1). A record with zero token matches is excluded outright (its
 classification/outcome weight never rescues it into the results). Surviving
 records add a classification weight (foundational 5 / tactical 2 /
 observational 1) and an outcomes tally (+2 success, -1 failure, from
-outcomes.jsonl, same join-by-id contract as prime.py).
+outcomes.jsonl, same join-by-id contract as prime.py). Records superseded by
+another live record (`supersedes: <id>` in its frontmatter) are hidden by
+default; pass --all/--include-superseded to reinclude them.
 
 Root resolution + discovery = same contract as prime.py: $MEMORY_ROOT env var,
 else git root of cwd, else cwd. Default scan: every <root>/**/memory/records
@@ -129,6 +131,8 @@ def main(argv):
     p.add_argument("--engine", choices=["builtin", "env"], default=None,
                    help="builtin: internal scan. env: delegate to $DRAILLE_SEARCH_CMD. "
                         "Default: env if DRAILLE_SEARCH_CMD is set, else builtin.")
+    p.add_argument("--all", "--include-superseded", dest="include_superseded", action="store_true",
+                   help="include records superseded by another record (hidden by default)")
     a = p.parse_args(argv[1:])
     if a.n < 1:
         p.error("-n must be >= 1")               # GUARD: -n 0/-1 would silently slice hits away
@@ -169,6 +173,12 @@ def main(argv):
         r, _ = load_records(d)
         recs += r
     tally = load_outcomes(outcomes_path)
+
+    # Obsolescence by supersession (same contract as prime.py): hide any record whose id is
+    # named by another live record's `supersedes` — unless --all/--include-superseded.
+    if not a.include_superseded:
+        superseded_ids = {r["supersedes"] for r in recs if r.get("supersedes")}
+        recs = [r for r in recs if r.get("id") not in superseded_ids]
 
     hits = []
     for rec in recs:

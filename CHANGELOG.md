@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-07
+
+### Added
+
+- Superseding: `draille record --supersedes <id>` marks a prior record obsolete.
+  `prime` and `search` hide superseded records by default (still on disk / in git;
+  `search --all` reincludes them). The markdown-shaped answer to the top named
+  pain of agent memory — stale facts that keep ranking and misleading. Handles
+  chains, cycles, self-supersede, and dangling/cross-scope targets safely.
+- `draille doctor` — store health check: corrupt records, orphan outcomes,
+  dangling `supersedes`, unsafe scope homes, duplicate ids (cross-scope aware).
+  Exit 1 on any issue for CI/pre-commit; `--json` for machine output.
+- `adapters/search/ripgrep.sh` — a concrete, portable BYO search backend example
+  (ripgrep with grep fallback), proving the `DRAILLE_SEARCH_CMD` seam end to end.
+- README "Non-goals" section: per-turn auto-extraction, embedded vector DB, and a
+  hosted multi-user layer are deliberate non-goals, not gaps.
+
 ## [1.1.1] - 2026-07-07
 
 ### Fixed
@@ -78,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Record filenames are derived from a slugged, normalized title, preventing
   path or shell injection through user-supplied titles.
 
+[1.2.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.2.0
 [1.1.1]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.1.1
 [1.1.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.1.0
 [1.0.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.0.0

@@ -18,17 +18,25 @@ traveler (human or agent) with no tooling at all.
 
 ## What it is
 
-Four stdlib-only Python tools, ~400 lines total, no dependencies:
+Stdlib-only Python tools, no dependencies:
 
 | Command | Role |
 |---|---|
 | `draille init` | scaffold `memory/` (HANDOVER template, journal) and print the agent bootstrap block |
-| `draille record` | write a durable record (markdown + frontmatter, stable content-hash id) |
+| `draille record` | write a durable record (markdown + frontmatter, stable content-hash id); `--supersedes <id>` marks a prior record obsolete |
 | `draille prime` | rank all records (classification weight + outcome tally) into a budgeted digest for session start |
 | `draille outcome` | append "this record demonstrably helped/failed" to an append-only log, keyed by immutable id |
 | `draille search` | ranked full-text search over records (pure scan, no index) — or delegate to your own engine via `DRAILLE_SEARCH_CMD` ([BYO backends](docs/backends.md)) |
 | `draille handover` | show/set the CORE block of `memory/HANDOVER.md` (atomic, Letta-style core memory) |
+| `draille doctor` | health-check the store: corrupt records, orphan outcomes, dangling `supersedes`, unsafe scope homes, duplicate ids (exit 1 on any issue — CI-friendly) |
 | `draille migrate` | import legacy JSONL records into markdown |
+
+**Superseding — stale memory that stops misleading.** Outdated facts are the
+named failure of agent memory: "we use Postgres" lingers and misleads long after
+the project moved to SQLite. `draille record … --supersedes <old-id>` marks the
+old record obsolete; `prime` and `search` hide it by default (still on disk, still
+in git history — `search --all` brings it back). One frontmatter line, no graph,
+no TTL daemon: the markdown-shaped answer to temporal decay.
 
 Each is also a standalone script (`draille/<name>.py`) you can copy anywhere — no install needed.
 
@@ -43,6 +51,19 @@ memory/
 ## draille vs. Claude Code's native memory
 
 Claude Code now ships its own memory: a per-project auto memory directory indexed by `MEMORY.md`, but it's per-user and per-tool — it lives outside the repo and only Claude Code reads it. draille is project-owned: records live in the repo, travel with `git clone`, and are legible to any runtime (Claude Code, Codex, Cursor, or a human with `cat`). The two compose fine — native memory for personal prefs and scratch state, draille for what the *project* has learned.
+
+## Non-goals
+
+- **No per-turn auto-extraction.** Frameworks like mem0/Letta watch every turn
+  and write memory automatically. draille doesn't, on purpose: automatic
+  extraction produces noisy memory, and the whole point here is a *curated*,
+  human-editable, git-diffable trail. Capture is a deliberate act (`record`, or
+  the session-end ritual), not a background process. If you want the agent to
+  hold live working state mid-session, that's what `handover set` is for.
+- **No embedded vector database.** Semantic recall is a `DRAILLE_SEARCH_CMD`
+  backend you bring, not infrastructure draille ships ([BYO backends](docs/backends.md)).
+- **No hosted service / multi-user layer.** draille is a local, per-repo store.
+  For memory-as-a-service at scale, that's a different tool.
 
 ## Install
 

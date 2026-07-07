@@ -231,6 +231,31 @@ def dir_forces_builtin():
            "--dir + --engine env: rejected (backend can't honor --dir)")
 
 
+def superseded_hit_hidden_by_default():
+    with tempfile.TemporaryDirectory() as tmp:
+        rdir = os.path.join(tmp, "records")
+        os.makedirs(rdir)
+
+        def rec(name, fm, body):
+            with open(os.path.join(rdir, name + ".md"), "w") as f:
+                f.write("---\n" + fm + "\n---\n" + body + "\n")
+
+        rec("old", "id: old\ntype: decision\nclassification: observational\nsummary: none", "# widget old")
+        rec("new", "id: new\ntype: decision\nclassification: observational\nsummary: none\nsupersedes: old",
+            "# widget new")
+
+        r = subprocess.run([sys.executable, SEARCH, "widget", "--dir", tmp],
+                            capture_output=True, text=True)
+        ok(r.returncode == 0, "supersession: exit 0")
+        ok("id:new" in r.stdout and "id:old" not in r.stdout,
+           "supersession: superseded hit hidden by default, superseding record shown")
+
+        r2 = subprocess.run([sys.executable, SEARCH, "widget", "--dir", tmp, "--all"],
+                             capture_output=True, text=True)
+        ok("id:old" in r2.stdout and "id:new" in r2.stdout,
+           "supersession: --all reincludes the superseded hit")
+
+
 title_beats_body()
 outcome_boosts_rank()
 absent_term_no_matches()
@@ -241,6 +266,7 @@ env_cmd_delegates()
 engine_builtin_ignores_env()
 env_cmd_hostile()
 dir_forces_builtin()
+superseded_hit_hidden_by_default()
 
 print("search tests: %d passed, %d failed" % (P, F))
 sys.exit(0 if F == 0 else 1)

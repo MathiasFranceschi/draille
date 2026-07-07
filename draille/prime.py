@@ -6,6 +6,10 @@ Glob records/*.md -> parse frontmatter -> JOIN outcomes.jsonl tally -> weighted 
 on-demand (always reads live files -> stale != broken); git is the WORM layer (a deleted/
 corrupted record is recoverable from git log). Stdlib only.
 
+Obsolescence by supersession: a record's `supersedes: <id>` frontmatter key retires that id
+from the digest (dead for ranking, still on disk). No recursive resolution — the hidden set
+is every id named by any live record's supersedes.
+
 Root resolution: $MEMORY_ROOT env var, else the git root of the cwd, else cwd.
 Default scan: every <root>/**/memory/records (mono-project = just <root>/memory/records),
 outcomes at <root>/memory/outcomes.jsonl.
@@ -116,6 +120,13 @@ def main(argv):
         recs += r
         quarantined += q
     tally = load_outcomes(outcomes_path)
+    # Obsolescence by supersession: a record naming another via `supersedes: <id>` retires
+    # that id from the ranking (dead for prime/search, still on disk = git/history). No
+    # recursive resolution needed: the hidden set is just every id that appears as *someone
+    # else's* supersedes value (A supersedes B, C supersedes A -> hidden={A,B}, C stays).
+    superseded_ids = {r["supersedes"] for r in recs if r.get("supersedes")}
+    hidden = [r for r in recs if r.get("id") in superseded_ids]
+    recs = [r for r in recs if r.get("id") not in superseded_ids]
     # orphan outcomes (an id with no record, e.g. its markdown was deleted) are ignored by
     # construction: we only ever emit `recs`, and score() reads the tally by the record's own id.
     recs.sort(key=lambda r: score(r, tally), reverse=True)
@@ -134,6 +145,8 @@ def main(argv):
     if quarantined:
         out.append("\n⚠ %d record(s) quarantined (invalid frontmatter) — see stderr\n"
                    % len(quarantined))
+    if hidden:
+        out.append("\n(%d superseded record(s) hidden)\n" % len(hidden))
     sys.stdout.write("".join(out))
     return 0
 

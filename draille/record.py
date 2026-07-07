@@ -11,7 +11,7 @@ Scope routing: if <root>/memory/scopes.json exists (multi-scope mode), --scope
 is required and maps to a home dir; otherwise (mono-project mode) records land
 in <root>/memory/records and --scope defaults to the root's basename.
 
-Usage: record.py <type> <classification> <title> [--scope S] [--body TEXT] [--evidence-sha SHA] [--dir DIR]
+Usage: record.py <type> <classification> <title> [--scope S] [--body TEXT] [--evidence-sha SHA] [--dir DIR] [--supersedes ID]
 """
 import sys, os, json, argparse, hashlib, re, datetime
 
@@ -46,11 +46,14 @@ def main(argv):
     p.add_argument("--scope", default="", help="routing scope (required when memory/scopes.json is present)")
     p.add_argument("--body", default="")
     p.add_argument("--evidence-sha", default="", dest="sha")
+    p.add_argument("--supersedes", default="", dest="supersedes",
+                   help="id of a record this one replaces (hidden from prime/search ranking)")
     p.add_argument("--dir", default="", dest="dir_override",
                    help="explicit memory dir (escape hatch — bypasses root/scope routing)")
     a = p.parse_args(argv[1:])
     typ, cls, title = a.type, a.classification, a.title
     body, sha, scope, dir_override = a.body, a.sha, a.scope, a.dir_override
+    supersedes = a.supersedes
     # frontmatter + heading are line-based — a multi-line title would inject keys
     # (prime quarantine, or rank forgery via an injected classification: line)
     title = title.replace("\r", " ").replace("\n", " ")
@@ -104,6 +107,8 @@ def main(argv):
           "scope: %s" % scope, 'evidence_sha: "%s"' % sha, "relates_to: []",
           "role: memory-record", "created: %s" % date,
           'summary: "%s"' % title[:120].replace('"', "")]
+    if supersedes:
+        fm.append("supersedes: %s" % supersedes)
     md = "---\n" + "\n".join(fm) + "\n---\n\n# " + title + "\n\n" + (body or "") + "\n"
     with open(os.path.join(rdir, "%s-%s-%s.md" % (date, slug(title), rid)), "w", encoding="utf-8") as f:
         f.write(md)

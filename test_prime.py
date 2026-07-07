@@ -123,9 +123,37 @@ def ascension_mode():
            "ascension: outcome.py (no --dir) writes to the .git root's memory/outcomes.jsonl")
 
 
+def supersession_mode():
+    """Records naming another via `supersedes: <id>` retire that id from the digest
+    (chain, no recursion needed) and dangling supersedes (target id not on disk) is not fatal."""
+    with tempfile.TemporaryDirectory() as tmp:
+        rdir = os.path.join(tmp, "records")
+        os.makedirs(rdir)
+
+        def rec(name, fm, body=None):
+            with open(os.path.join(rdir, name + ".md"), "w") as f:
+                f.write("---\n" + fm + "\n---\n" + (body or "# " + name) + "\n")
+
+        # chain: c supersedes a, a supersedes b -> a and b hidden, c shown
+        rec("b", "id: b\ntype: decision\nclassification: foundational\nsummary: B")
+        rec("a", "id: a\ntype: decision\nclassification: foundational\nsummary: A\nsupersedes: b")
+        rec("c", "id: c\ntype: decision\nclassification: foundational\nsummary: C\nsupersedes: a")
+        # dangling: points at an id that doesn't exist on disk -> not fatal, record still shown
+        rec("d", "id: d\ntype: decision\nclassification: foundational\nsummary: D\nsupersedes: ghost-id")
+
+        r = subprocess.run([sys.executable, PRIME, tmp], capture_output=True, text=True)
+        ok(r.returncode == 0, "supersession: exit 0")
+        ok("id:c" in r.stdout, "supersession: superseding record (c) shown")
+        ok("id:a" not in r.stdout and "id:b" not in r.stdout,
+           "supersession: chain hides both intermediate (a) and original (b) records")
+        ok("id:d" in r.stdout, "supersession: dangling supersedes (target not on disk) -> record still shown, no crash")
+        ok("2 superseded record(s) hidden" in r.stdout, "supersession: hidden count reported in digest footer")
+
+
 explicit_dir_mode()
 default_root_mode()
 ascension_mode()
+supersession_mode()
 
 print("prime tests: %d passed, %d failed" % (P, F))
 sys.exit(0 if F == 0 else 1)
