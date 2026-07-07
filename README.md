@@ -1,6 +1,7 @@
 # draille
 
 ![tests](https://github.com/MathiasFranceschi/draille/actions/workflows/ci.yml/badge.svg)
+![PyPI](https://img.shields.io/pypi/v/draille)
 
 Plain-markdown durable memory for AI agents. Any runtime, local, git-versioned, hand-editable, zero lock-in.
 
@@ -68,8 +69,7 @@ Claude Code now ships its own memory: a per-project auto memory directory indexe
 ## Install
 
 ```bash
-pipx install git+https://github.com/MathiasFranceschi/draille
-# or: pip install git+https://github.com/MathiasFranceschi/draille
+pip install draille        # or: pipx install draille
 # or: git clone and run the scripts directly — stdlib only, nothing to install
 ```
 
