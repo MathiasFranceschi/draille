@@ -5,9 +5,9 @@ with the outcomes log centralized at <root>/memory/outcomes.jsonl regardless of 
 import subprocess, tempfile, os, sys, json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PRIME = os.path.join(HERE, "prime.py")
-REC = os.path.join(HERE, "record.py")
-OUT = os.path.join(HERE, "outcome.py")
+PRIME = os.path.join(HERE, "draille", "prime.py")
+REC = os.path.join(HERE, "draille", "record.py")
+OUT = os.path.join(HERE, "draille", "outcome.py")
 P = F = 0
 
 

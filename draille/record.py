@@ -38,7 +38,7 @@ def slug(s, n=40):
 
 
 def main(argv):
-    p = argparse.ArgumentParser(prog="record.py",
+    p = argparse.ArgumentParser(prog=os.path.basename(argv[0]),
                                 description="Create a durable markdown memory record; prints the new id on stdout.")
     p.add_argument("type", choices=TYPES)
     p.add_argument("classification", choices=CLASSES)

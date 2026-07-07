@@ -1,5 +1,7 @@
 # draille
 
+![tests](https://github.com/MathiasFranceschi/draille/actions/workflows/ci.yml/badge.svg)
+
 Plain-markdown durable memory for AI agents. Any runtime, local, git-versioned, hand-editable, zero lock-in.
 
 ## Why « draille »
@@ -16,14 +18,16 @@ traveler (human or agent) with no tooling at all.
 
 ## What it is
 
-Four stdlib-only Python scripts, ~350 lines total, no dependencies:
+Four stdlib-only Python tools, ~400 lines total, no dependencies:
 
-| Script | Role |
+| Command | Role |
 |---|---|
-| `record.py` | write a durable record (markdown + frontmatter, stable content-hash id) |
-| `prime.py` | rank all records (classification weight + outcome tally) into a budgeted digest for session start |
-| `outcome.py` | append "this record demonstrably helped/failed" to an append-only log, keyed by immutable id |
-| `migrate.py` | import legacy JSONL records into markdown |
+| `draille record` | write a durable record (markdown + frontmatter, stable content-hash id) |
+| `draille prime` | rank all records (classification weight + outcome tally) into a budgeted digest for session start |
+| `draille outcome` | append "this record demonstrably helped/failed" to an append-only log, keyed by immutable id |
+| `draille migrate` | import legacy JSONL records into markdown |
+
+Each is also a standalone script (`draille/<name>.py`) you can copy anywhere — no install needed.
 
 Storage is just files in your repo:
 
@@ -33,12 +37,20 @@ memory/
   outcomes.jsonl      # append-only; git is the WORM/recovery layer
 ```
 
+## Install
+
+```bash
+pipx install git+https://github.com/MathiasFranceschi/draille
+# or: pip install git+https://github.com/MathiasFranceschi/draille
+# or: git clone and run the scripts directly — stdlib only, nothing to install
+```
+
 ## Quickstart
 
 ```bash
-python3 record.py decision foundational "Use Postgres" --body "Because RLS."
-python3 prime.py          # ranked digest — paste/inject at session start
-python3 outcome.py <id> success --note "constrained the schema choice"
+draille record decision foundational "Use Postgres" --body "Because RLS."
+draille prime             # ranked digest — paste/inject at session start
+draille outcome <id> success --note "constrained the schema choice"
 ```
 
 Root resolution: `$MEMORY_ROOT` env var, else the git root of the cwd.
@@ -52,10 +64,10 @@ entirely; don't pass it untrusted input.
 
 Drop this in your `AGENTS.md` / `CLAUDE.md` (see [AGENTS.md](AGENTS.md)):
 
-1. Session start: run `prime.py`, read `memory/HANDOVER.md`.
+1. Session start: run `draille prime`, read `memory/HANDOVER.md`.
 2. Session end, triage three tiers:
    - **HOT** → rewrite the CORE block of `memory/HANDOVER.md` (≤15 lines, merge — never stack),
-   - **DURABLE** → `record.py <type> <classification> "<title>" --body "…"`,
+   - **DURABLE** → `draille record <type> <classification> "<title>" --body "…"`,
    - **JOURNAL** → append `memory/journal/<YYYY-MM-DD>.md`.
 3. Commit `session-end: <date>`. Never auto-push.
 

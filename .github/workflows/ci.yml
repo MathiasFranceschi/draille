@@ -1,0 +1,23 @@
+name: tests
+on: [push, pull_request]
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.9", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python test_record.py
+      - run: python test_prime.py
+      - run: python test_migrate.py
+      - name: install + CLI smoke
+        run: |
+          pip install .
+          draille record decision tactical "ci smoke" --dir "${{ runner.temp }}/mem"
+          draille prime --dir "${{ runner.temp }}/mem"

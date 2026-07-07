@@ -30,7 +30,7 @@ def memory_root():
 
 
 def main(argv):
-    p = argparse.ArgumentParser(prog="outcome.py",
+    p = argparse.ArgumentParser(prog=os.path.basename(argv[0]),
                                 description="Append an outcome event to outcomes.jsonl.")
     p.add_argument("record_id")
     p.add_argument("status", choices=STATUSES)

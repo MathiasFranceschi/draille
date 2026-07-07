@@ -5,8 +5,8 @@ resolution involved, so it is unaffected by MEMORY_ROOT / scopes.json. Copied ve
 import subprocess, tempfile, os, sys, json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MIG = os.path.join(HERE, "migrate.py")
-PRIME = os.path.join(HERE, "prime.py")
+MIG = os.path.join(HERE, "draille", "migrate.py")
+PRIME = os.path.join(HERE, "draille", "prime.py")
 res = {"p": 0, "f": 0}
 
 

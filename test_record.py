@@ -4,7 +4,7 @@ multi-scope (scopes.json) routing, --dir escape preserved unchanged."""
 import subprocess, tempfile, os, sys, json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REC, PRIME, OUT = (os.path.join(HERE, n) for n in ("record.py", "prime.py", "outcome.py"))
+REC, PRIME, OUT = (os.path.join(HERE, "draille", n) for n in ("record.py", "prime.py", "outcome.py"))
 res = {"p": 0, "f": 0}
 
 
