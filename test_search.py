@@ -116,11 +116,131 @@ def root_and_dir_respected():
         ok(r.returncode == 0 and "id:e1" in r.stdout, "MEMORY_ROOT: recursive scan finds a scoped record")
 
 
+def no_env_builtin_unchanged():
+    # baseline: with DRAILLE_SEARCH_CMD unset, search.py behaves exactly as before
+    with tempfile.TemporaryDirectory() as tmp:
+        rdir = os.path.join(tmp, "records")
+        os.makedirs(rdir)
+        with open(os.path.join(rdir, "r.md"), "w") as f:
+            f.write("---\nid: n1\ntype: decision\nclassification: observational\nsummary: none\n---\n# widget\n")
+
+        env = os.environ.copy()
+        env.pop("DRAILLE_SEARCH_CMD", None)
+        r = subprocess.run([sys.executable, SEARCH, "widget", "--dir", tmp],
+                            capture_output=True, text=True, env=env)
+        ok(r.returncode == 0 and "id:n1" in r.stdout, "no env: builtin scan runs and finds the record")
+
+
+def env_cmd_delegates():
+    with tempfile.TemporaryDirectory() as tmp:
+        fake = os.path.join(tmp, "fake_engine.py")
+        with open(fake, "w") as f:
+            f.write(
+                "import sys, os\n"
+                "print('ARGS:' + ' '.join(sys.argv[1:]))\n"
+                "print('ROOT:' + os.environ.get('MEMORY_ROOT', ''))\n"
+                "sys.exit(7)\n"
+            )
+        env = os.environ.copy()
+        env["DRAILLE_SEARCH_CMD"] = "%s %s" % (sys.executable, fake)
+        env["MEMORY_ROOT"] = tmp
+
+        r = subprocess.run([sys.executable, SEARCH, "widget", "gizmo"],
+                            capture_output=True, text=True, env=env)
+        ok(r.returncode == 7, "DRAILLE_SEARCH_CMD: child's exit code is propagated")
+        ok("ARGS:widget gizmo" in r.stdout, "DRAILLE_SEARCH_CMD: query terms forwarded as args")
+        ok(("ROOT:" + os.path.abspath(tmp)) in r.stdout, "DRAILLE_SEARCH_CMD: MEMORY_ROOT exported to child")
+
+
+def engine_builtin_ignores_env():
+    with tempfile.TemporaryDirectory() as tmp:
+        fake = os.path.join(tmp, "fake_engine.py")
+        with open(fake, "w") as f:
+            f.write("import sys; print('SHOULD NOT RUN'); sys.exit(1)\n")
+
+        rdir = os.path.join(tmp, "records")
+        os.makedirs(rdir)
+        with open(os.path.join(rdir, "r.md"), "w") as f:
+            f.write("---\nid: b1\ntype: decision\nclassification: observational\nsummary: none\n---\n# widget\n")
+
+        env = os.environ.copy()
+        env["DRAILLE_SEARCH_CMD"] = "%s %s" % (sys.executable, fake)
+
+        r = subprocess.run([sys.executable, SEARCH, "widget", "--dir", tmp, "--engine", "builtin"],
+                            capture_output=True, text=True, env=env)
+        ok(r.returncode == 0 and "id:b1" in r.stdout, "--engine builtin: scans internally")
+        ok("SHOULD NOT RUN" not in r.stdout, "--engine builtin: ignores DRAILLE_SEARCH_CMD")
+
+
+def env_cmd_hostile():
+    # hostile DRAILLE_SEARCH_CMD values: clean errors, never a traceback,
+    # and never executing the query terms as the command.
+    with tempfile.TemporaryDirectory() as tmp:
+        env = os.environ.copy()
+        env["MEMORY_ROOT"] = tmp
+
+        env["DRAILLE_SEARCH_CMD"] = 'foo "unbalanced'
+        r = subprocess.run([sys.executable, SEARCH, "widget"], capture_output=True, text=True, env=env)
+        ok(r.returncode != 0 and "Traceback" not in r.stderr,
+           "unbalanced quote in DRAILLE_SEARCH_CMD: clean error, no traceback")
+
+        marker = os.path.join(tmp, "pwned")
+        evil = os.path.join(tmp, "evil.py")
+        with open(evil, "w") as f:
+            f.write("open(%r, 'w').close()\n" % marker)
+        env["DRAILLE_SEARCH_CMD"] = "   "
+        r = subprocess.run([sys.executable, SEARCH, sys.executable, evil],
+                            capture_output=True, text=True, env=env)
+        ok(r.returncode != 0 and not os.path.exists(marker),
+           "blank DRAILLE_SEARCH_CMD: rejected, query terms NOT executed as a command")
+
+        env["DRAILLE_SEARCH_CMD"] = "/nonexistent/bin/zzz"
+        r = subprocess.run([sys.executable, SEARCH, "widget"], capture_output=True, text=True, env=env)
+        ok(r.returncode == 127 and "Traceback" not in r.stderr and "cannot run" in r.stderr,
+           "absent backend command: exit 127 with clean message")
+
+        # --engine env with no DRAILLE_SEARCH_CMD at all: error, not silent builtin
+        env2 = os.environ.copy()
+        env2.pop("DRAILLE_SEARCH_CMD", None)
+        r = subprocess.run([sys.executable, SEARCH, "widget", "--engine", "env"],
+                            capture_output=True, text=True, env=env2)
+        ok(r.returncode != 0 and "DRAILLE_SEARCH_CMD" in r.stderr,
+           "--engine env without DRAILLE_SEARCH_CMD: explicit error, no silent builtin")
+
+
+def dir_forces_builtin():
+    with tempfile.TemporaryDirectory() as tmp:
+        fake = os.path.join(tmp, "fake_engine.py")
+        with open(fake, "w") as f:
+            f.write("import sys; print('SHOULD NOT RUN'); sys.exit(1)\n")
+        rdir = os.path.join(tmp, "records")
+        os.makedirs(rdir)
+        with open(os.path.join(rdir, "r.md"), "w") as f:
+            f.write("---\nid: dd1\ntype: decision\nclassification: observational\nsummary: none\n---\n# widget\n")
+        env = os.environ.copy()
+        env["DRAILLE_SEARCH_CMD"] = "%s %s" % (sys.executable, fake)
+
+        r = subprocess.run([sys.executable, SEARCH, "widget", "--dir", tmp],
+                            capture_output=True, text=True, env=env)
+        ok(r.returncode == 0 and "id:dd1" in r.stdout and "SHOULD NOT RUN" not in r.stdout,
+           "--dir with env cmd set: builtin scan of D, backend not invoked")
+
+        r = subprocess.run([sys.executable, SEARCH, "widget", "--dir", tmp, "--engine", "env"],
+                            capture_output=True, text=True, env=env)
+        ok(r.returncode != 0 and "SHOULD NOT RUN" not in r.stdout,
+           "--dir + --engine env: rejected (backend can't honor --dir)")
+
+
 title_beats_body()
 outcome_boosts_rank()
 absent_term_no_matches()
 corrupt_record_quarantined()
 root_and_dir_respected()
+no_env_builtin_unchanged()
+env_cmd_delegates()
+engine_builtin_ignores_env()
+env_cmd_hostile()
+dir_forces_builtin()
 
 print("search tests: %d passed, %d failed" % (P, F))
 sys.exit(0 if F == 0 else 1)

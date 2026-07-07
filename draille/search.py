@@ -14,9 +14,12 @@ else git root of cwd, else cwd. Default scan: every <root>/**/memory/records
 <root>/memory/outcomes.jsonl. --dir D: records at D/records, outcomes at
 D/outcomes.jsonl. Invalid frontmatter is quarantined (stderr), never halts.
 
-Usage: search.py <term> [term ...] [-n N] [--dir MEMORY_DIR]
+BYO backend: if $DRAILLE_SEARCH_CMD is set (and neither --engine builtin nor
+--dir is passed), delegates to it instead of scanning — see docs/backends.md.
+
+Usage: search.py <term> [term ...] [-n N] [--dir MEMORY_DIR] [--engine builtin|env]
 """
-import sys, os, glob, json, argparse
+import sys, os, glob, json, argparse, shlex, subprocess
 
 CLASS_BONUS = {"foundational": 5, "tactical": 2, "observational": 1}
 
@@ -123,9 +126,33 @@ def main(argv):
     p.add_argument("-n", type=int, default=10, help="max results (default 10)")
     p.add_argument("--dir", dest="dir_override", default="",
                    help="explicit memory dir (escape hatch — bypasses root scan)")
+    p.add_argument("--engine", choices=["builtin", "env"], default=None,
+                   help="builtin: internal scan. env: delegate to $DRAILLE_SEARCH_CMD. "
+                        "Default: env if DRAILLE_SEARCH_CMD is set, else builtin.")
     a = p.parse_args(argv[1:])
     if a.n < 1:
         p.error("-n must be >= 1")               # GUARD: -n 0/-1 would silently slice hits away
+
+    env_cmd = os.environ.get("DRAILLE_SEARCH_CMD", "")
+    # --dir is the builtin escape hatch: it never routes to a backend implicitly
+    engine = a.engine or ("env" if env_cmd and not a.dir_override else "builtin")
+    if engine == "env":
+        if a.dir_override:
+            p.error("--dir only works with the builtin engine")
+        try:
+            cmd = shlex.split(env_cmd)
+        except ValueError as e:                      # GUARD: unbalanced quotes → clean error, no traceback
+            p.error("invalid DRAILLE_SEARCH_CMD: %s" % e)
+        if not cmd:                                  # GUARD: empty/blank cmd would exec the query terms
+            p.error("--engine env requires a non-empty DRAILLE_SEARCH_CMD")
+        child_env = os.environ.copy()
+        child_env["MEMORY_ROOT"] = memory_root()
+        try:
+            return subprocess.call(cmd + a.terms, env=child_env)  # no shell=True — terms are untrusted input
+        except OSError as e:                         # GUARD: missing/non-executable backend
+            sys.stderr.write("cannot run DRAILLE_SEARCH_CMD %r: %s\n" % (cmd[0], e))
+            return 127
+
     tokens = [t.lower() for t in a.terms if t]
 
     if a.dir_override:

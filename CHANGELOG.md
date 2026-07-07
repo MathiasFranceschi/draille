@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-07-07
+
+### Added
+
+- `draille handover` — show/set the CORE block of `memory/HANDOVER.md`
+  programmatically (Letta-style agent-editable core memory): atomic write
+  (tmp + rename), preserves the rest of the file byte-for-byte (CRLF included),
+  preserves permissions, warns beyond 15 lines.
+- BYO search backends: `DRAILLE_SEARCH_CMD` delegates `draille search` to any
+  external engine (semantic or otherwise); `--engine builtin|env` selects
+  explicitly. Contract in `docs/backends.md`. The builtin pure-scan stays the
+  zero-config default.
+- Positioning docs refreshed against the July 2026 landscape (file-based memory
+  wave, Claude Code native memory, memsearch / TencentDB Agent Memory / engramory).
+
+### Security
+
+- search: a blank `DRAILLE_SEARCH_CMD` caused the query terms themselves to be
+  executed as the delegate command (arbitrary execution from search input) —
+  now rejected; malformed/missing commands fail cleanly (exit 2/127, no shell).
+- handover: a `## CORE` decoy inside the YAML frontmatter could corrupt the
+  file on `set` — the frontmatter is now skipped before block matching.
+
 ## [1.0.0] - 2026-07-07
 
 ### Added
@@ -45,5 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Record filenames are derived from a slugged, normalized title, preventing
   path or shell injection through user-supplied titles.
 
+[1.1.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.1.0
 [1.0.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.0.0
 [0.1.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v0.1.0

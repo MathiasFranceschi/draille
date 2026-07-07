@@ -26,7 +26,8 @@ Four stdlib-only Python tools, ~400 lines total, no dependencies:
 | `draille record` | write a durable record (markdown + frontmatter, stable content-hash id) |
 | `draille prime` | rank all records (classification weight + outcome tally) into a budgeted digest for session start |
 | `draille outcome` | append "this record demonstrably helped/failed" to an append-only log, keyed by immutable id |
-| `draille search` | ranked full-text search over records (pure scan, no index, no state) |
+| `draille search` | ranked full-text search over records (pure scan, no index) — or delegate to your own engine via `DRAILLE_SEARCH_CMD` ([BYO backends](docs/backends.md)) |
+| `draille handover` | show/set the CORE block of `memory/HANDOVER.md` (atomic, Letta-style core memory) |
 | `draille migrate` | import legacy JSONL records into markdown |
 
 Each is also a standalone script (`draille/<name>.py`) you can copy anywhere — no install needed.
@@ -38,6 +39,10 @@ memory/
   records/*.md        # one record per file — human-editable, git-diffable
   outcomes.jsonl      # append-only; git is the WORM/recovery layer
 ```
+
+## draille vs. Claude Code's native memory
+
+Claude Code now ships its own memory: a per-project auto memory directory indexed by `MEMORY.md`, but it's per-user and per-tool — it lives outside the repo and only Claude Code reads it. draille is project-owned: records live in the repo, travel with `git clone`, and are legible to any runtime (Claude Code, Codex, Cursor, or a human with `cat`). The two compose fine — native memory for personal prefs and scratch state, draille for what the *project* has learned.
 
 ## Install
 
