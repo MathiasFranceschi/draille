@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "draille"
-version = "0.1.0"
+version = "1.0.0"
 description = "Plain-markdown durable memory for AI agents — any runtime, local, git-versioned, zero lock-in"
 readme = "README.md"
 license = {text = "MIT"}

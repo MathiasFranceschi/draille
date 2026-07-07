@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """draille — unified CLI. Dispatches to the standalone tools.
 
-Usage: draille <record|prime|outcome|migrate> [args...]
+Usage: draille <init|record|prime|outcome|search|migrate> [args...]
 Each subcommand is also a standalone script (draille/<name>.py) — same args.
 """
 import sys
 
-from . import record, prime, outcome, migrate
+from . import record, prime, outcome, migrate, init, search
 
 CMDS = {"record": record.main, "prime": prime.main,
-        "outcome": outcome.main, "migrate": migrate.main}
+        "outcome": outcome.main, "migrate": migrate.main,
+        "init": init.main, "search": search.main}
 
 
 def main(argv=None):

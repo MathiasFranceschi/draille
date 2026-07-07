@@ -22,9 +22,11 @@ Four stdlib-only Python tools, ~400 lines total, no dependencies:
 
 | Command | Role |
 |---|---|
+| `draille init` | scaffold `memory/` (HANDOVER template, journal) and print the agent bootstrap block |
 | `draille record` | write a durable record (markdown + frontmatter, stable content-hash id) |
 | `draille prime` | rank all records (classification weight + outcome tally) into a budgeted digest for session start |
 | `draille outcome` | append "this record demonstrably helped/failed" to an append-only log, keyed by immutable id |
+| `draille search` | ranked full-text search over records (pure scan, no index, no state) |
 | `draille migrate` | import legacy JSONL records into markdown |
 
 Each is also a standalone script (`draille/<name>.py`) you can copy anywhere — no install needed.
@@ -48,9 +50,11 @@ pipx install git+https://github.com/MathiasFranceschi/draille
 ## Quickstart
 
 ```bash
+draille init              # scaffold memory/ + print the agent bootstrap block
 draille record decision foundational "Use Postgres" --body "Because RLS."
 draille prime             # ranked digest — paste/inject at session start
 draille outcome <id> success --note "constrained the schema choice"
+draille search postgres   # ranked hits across all records
 ```
 
 Root resolution: `$MEMORY_ROOT` env var, else the git root of the cwd.
