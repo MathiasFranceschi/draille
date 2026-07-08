@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-08
+
+### Added
+
+- `draille status` — fast persistence + health check for hooks/gates: detects
+  uncommitted memory writes (git-dirty), counts records/outcomes/quarantined.
+  Exit 1 if dirty or corrupt so a runtime can gate on `draille status || persist`;
+  `unknown` (store not under git) does not fail. The runtime-agnostic detection
+  primitive a durable-memory tool must own (vs each consumer reinventing it).
+- `PROTOCOL.md` — the runtime-agnostic 3-tier ritual (HOT/DURABLE/JOURNAL) as a
+  reusable, path-configurable agent protocol. draille ships the method; a runtime
+  binds it to its own events (Stop hook, PR gate). Per-runtime hook adapters are
+  a deliberate non-goal until a second consumer exists.
+
+### Fixed
+
+- Store discovery used unescaped `glob` — a memory root containing a glob class
+  (e.g. `proj[a]`) silently matched nothing, so `prime`/`search`/`doctor`/`status`
+  reported an empty store on a non-empty one. All globs now `glob.escape` the path.
+
 ## [1.2.0] - 2026-07-07
 
 ### Added
@@ -95,6 +115,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Record filenames are derived from a slugged, normalized title, preventing
   path or shell injection through user-supplied titles.
 
+[1.3.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.3.0
 [1.2.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.2.0
 [1.1.1]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.1.1
 [1.1.0]: https://github.com/MathiasFranceschi/draille/releases/tag/v1.1.0

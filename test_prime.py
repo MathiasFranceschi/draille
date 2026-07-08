@@ -150,10 +150,27 @@ def supersession_mode():
         ok("2 superseded record(s) hidden" in r.stdout, "supersession: hidden count reported in digest footer")
 
 
+def glob_metachar_root_mode():
+    """MEMORY_ROOT / dir containing a glob class like [a] must not silently match nothing
+    (glob.escape on the path portion). A bug here reports 0 records on a non-empty store."""
+    with tempfile.TemporaryDirectory() as tmp:
+        weird = os.path.join(tmp, "proj[a]")
+        rdir = os.path.join(weird, "memory", "records")
+        os.makedirs(rdir)
+        with open(os.path.join(rdir, "r.md"), "w") as f:
+            f.write("---\nid: meta-1\ntype: decision\nclassification: foundational\nsummary: M\n---\n# m\n")
+        env = os.environ.copy()
+        env["MEMORY_ROOT"] = weird
+        r = subprocess.run([sys.executable, PRIME], capture_output=True, text=True, env=env)
+        ok(r.returncode == 0 and "meta-1" in r.stdout,
+           "glob-metachar root: record under a '[a]' path is still found (glob.escape)")
+
+
 explicit_dir_mode()
 default_root_mode()
 ascension_mode()
 supersession_mode()
+glob_metachar_root_mode()
 
 print("prime tests: %d passed, %d failed" % (P, F))
 sys.exit(0 if F == 0 else 1)

@@ -58,3 +58,8 @@ At session end (« session-end »): triage into three tiers —
   `memory/journal/<YYYY-MM-DD>.md` (append-only).
 
 Commit `session-end: <YYYY-MM-DD>`. Never auto-push.
+
+Full ritual: see [PROTOCOL.md](PROTOCOL.md) — the runtime-agnostic version of
+the same triage (judgment criteria per tier, the persistence check via `draille
+status`), which this bootstrap block is a condensed
+pointer to.

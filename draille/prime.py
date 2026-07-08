@@ -61,7 +61,7 @@ def parse_frontmatter(text):
 
 def load_records(records_dir):
     recs, quarantined = [], []
-    for path in sorted(glob.glob(os.path.join(records_dir, "*.md"))):
+    for path in sorted(glob.glob(os.path.join(glob.escape(records_dir), "*.md"))):
         try:
             with open(path, encoding="utf-8") as f:
                 meta, body = parse_frontmatter(f.read())
@@ -112,7 +112,7 @@ def main(argv):
         outcomes_path = os.path.join(argv[1], "outcomes.jsonl")
     else:                                               # default: every per-scope home under the root
         root = memory_root()
-        record_dirs = glob.glob(os.path.join(root, "**", "memory", "records"), recursive=True)
+        record_dirs = glob.glob(os.path.join(glob.escape(root), "**", "memory", "records"), recursive=True)
         outcomes_path = os.path.join(root, "memory", "outcomes.jsonl")  # one central id-keyed log
     recs, quarantined = [], []
     for d in record_dirs:

@@ -62,7 +62,7 @@ def load_records(records_dir):
     Dup-id detection lives in main() — it must span every scope home the
     default recursive scan aggregates, not just one records dir."""
     recs, quarantined = [], []
-    for path in sorted(glob.glob(os.path.join(records_dir, "*.md"))):
+    for path in sorted(glob.glob(os.path.join(glob.escape(records_dir), "*.md"))):
         try:
             with open(path, encoding="utf-8") as f:
                 meta, _body = parse_frontmatter(f.read())
@@ -133,7 +133,7 @@ def main(argv):
         root = dir_override
     else:
         root = memory_root()
-        record_dirs = glob.glob(os.path.join(root, "**", "memory", "records"), recursive=True)
+        record_dirs = glob.glob(os.path.join(glob.escape(root), "**", "memory", "records"), recursive=True)
         outcomes_path = os.path.join(root, "memory", "outcomes.jsonl")
 
     recs, quarantined = [], []

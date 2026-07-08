@@ -63,7 +63,7 @@ def parse_frontmatter(text):
 def load_records(records_dir):
     """Like prime.py's load_records, but also keeps the raw body (for scoring) and path (for display)."""
     recs, quarantined = [], []
-    for path in sorted(glob.glob(os.path.join(records_dir, "*.md"))):
+    for path in sorted(glob.glob(os.path.join(glob.escape(records_dir), "*.md"))):
         try:
             with open(path, encoding="utf-8") as f:
                 meta, body = parse_frontmatter(f.read())
@@ -165,7 +165,7 @@ def main(argv):
         outcomes_path = os.path.join(a.dir_override, "outcomes.jsonl")
     else:
         root_disp = memory_root()
-        record_dirs = glob.glob(os.path.join(root_disp, "**", "memory", "records"), recursive=True)
+        record_dirs = glob.glob(os.path.join(glob.escape(root_disp), "**", "memory", "records"), recursive=True)
         outcomes_path = os.path.join(root_disp, "memory", "outcomes.jsonl")
 
     recs = []

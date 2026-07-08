@@ -30,6 +30,7 @@ Stdlib-only Python tools, no dependencies:
 | `draille search` | ranked full-text search over records (pure scan, no index) — or delegate to your own engine via `DRAILLE_SEARCH_CMD` ([BYO backends](docs/backends.md)) |
 | `draille handover` | show/set the CORE block of `memory/HANDOVER.md` (atomic, Letta-style core memory) |
 | `draille doctor` | health-check the store: corrupt records, orphan outcomes, dangling `supersedes`, unsafe scope homes, duplicate ids (exit 1 on any issue — CI-friendly) |
+| `draille status` | fast persistence + health check — is memory uncommitted (dirty) or corrupt? exit 1 if so (for hooks/gates: `draille status || persist`) |
 | `draille migrate` | import legacy JSONL records into markdown |
 
 **Superseding — stale memory that stops misleading.** Outdated facts are the
@@ -100,5 +101,9 @@ Drop this in your `AGENTS.md` / `CLAUDE.md` (see [AGENTS.md](AGENTS.md)):
    - **DURABLE** → `draille record <type> <classification> "<title>" --body "…"`,
    - **JOURNAL** → append `memory/journal/<YYYY-MM-DD>.md`.
 3. Commit `session-end: <date>`. Never auto-push.
+
+The full runtime-agnostic ritual — with the judgment criteria per tier and the
+persistence check (`draille status`) — lives in [PROTOCOL.md](PROTOCOL.md); the
+block above is its condensed pointer.
 
 The system is the ritual, not the tooling — the scripts just keep the trail walkable.
