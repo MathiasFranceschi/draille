@@ -23,3 +23,7 @@ At session end ("session-end"): triage the session into three tiers —
 
 Commit `session-end: <YYYY-MM-DD>`. Never auto-push.
 ```
+
+**Multi-scope store?** If your root has a `memory/scopes.json`, `--scope <scope>`
+is required on every `draille record` — add it to the DURABLE line above
+(`--scope` = a key of `scopes.json`; records route to that scope's home).
