@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-08
+
+### Added
+
+- Task guard: `handover set` stamps every `- [t] ` bullet in the new CORE
+  body with a fresh, file-unique `- [t-<4hex>] ` id. A soft diff-guard then
+  compares old CORE vs new body for pending ids (`[t-xxxx]` with no `closed`
+  marker on the line) that silently disappeared — never blocks the write,
+  but warns on stderr and logs `dropped`/`closed`/`restored` events to
+  `<memory-dir>/task-guard.jsonl`. `draille status` surfaces the open-drop
+  count (`open_task_drops` in `--json`) — advisory, doesn't affect exit code.
+  Guards against the silent erosion of pending tasks under lossy LLM rewrites
+  of the CORE block.
+
 ## [1.3.0] - 2026-07-08
 
 ### Added

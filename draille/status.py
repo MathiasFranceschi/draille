@@ -19,6 +19,12 @@ Two dimensions:
 Exit 0 if (committed or unknown) and zero quarantined; 1 if dirty=yes or any
 quarantined (so a hook can do `draille status || persist`).
 
+Task guard (advisory, does not affect exit code): counts "open drops" from
+<memory-dir>/task-guard.jsonl (same dir resolution as handover.py, not the
+per-scope records glob above — the file lives next to HANDOVER.md) — pending
+task ids dropped by `handover set` with no later closed/restored event.
+Missing file -> 0, not an error.
+
 Usage: status.py [--dir MEMORY_DIR] [--json]
 """
 import sys, os, json, glob, argparse, subprocess
@@ -93,6 +99,28 @@ def count_outcomes(path):
     return n
 
 
+def count_open_task_drops(memory_dir):
+    """Count ids whose most recent event in task-guard.jsonl is "dropped"
+    (no later closed/restored). Missing file -> 0."""
+    path = os.path.join(memory_dir, "task-guard.jsonl")
+    if not os.path.isfile(path):
+        return 0
+    last = {}
+    with open(path, encoding="utf-8") as f:
+        for ln in f:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                ev = json.loads(ln)
+            except Exception:                        # GUARD: skip malformed line, never crash
+                continue
+            tid, kind = ev.get("id"), ev.get("kind")
+            if tid and kind:
+                last[tid] = kind
+    return sum(1 for k in last.values() if k == "dropped")
+
+
 def check_dirty(root, scope_paths):
     """(dirty, uncommitted_count). dirty is True/False/None (None = unknown:
     no .git at root, or git binary missing — not an error)."""
@@ -123,6 +151,7 @@ def main(argv):
         outcomes_path = os.path.join(dir_override, "outcomes.jsonl")
         root = dir_override
         scope_paths = ["."]
+        memory_dir = dir_override
     else:
         root = memory_root()
         record_dirs = glob.glob(os.path.join(glob.escape(root), "**", "memory", "records"), recursive=True)
@@ -130,6 +159,9 @@ def main(argv):
         scope_dirs = set(os.path.relpath(os.path.dirname(d), root) for d in record_dirs)
         scope_dirs.add(os.path.relpath(os.path.dirname(outcomes_path), root))
         scope_paths = sorted(scope_dirs)
+        # task guard file lives at <root>/memory, same resolution as handover.py's
+        # default base -- NOT per-scope (it's not scanned via the records glob above)
+        memory_dir = os.path.join(root, "memory")
 
     recs, quarantined = [], []
     for d in record_dirs:
@@ -139,6 +171,7 @@ def main(argv):
 
     n_outcomes = count_outcomes(outcomes_path)
     dirty, uncommitted = check_dirty(root, scope_paths)
+    open_task_drops = count_open_task_drops(memory_dir)
 
     report = {
         "records": len(recs),
@@ -147,7 +180,9 @@ def main(argv):
         "quarantined_paths": sorted(quarantined),
         "dirty": dirty,
         "uncommitted_count": uncommitted,
+        "open_task_drops": open_task_drops,
     }
+    # advisory only -- open_task_drops never contributes to issues/exit code
     issues = (1 if dirty else 0) + (1 if report["quarantined"] else 0)
 
     if a.json:
@@ -161,8 +196,8 @@ def main(argv):
     else:
         dirty_s = "no"
     health_s = "clean" if not report["quarantined"] else "%d quarantined" % report["quarantined"]
-    sys.stdout.write("draille status: %d records, %d outcomes | dirty: %s | %s\n"
-                     % (report["records"], report["outcomes"], dirty_s, health_s))
+    sys.stdout.write("draille status: %d records, %d outcomes | dirty: %s | %s | task drops: %d open\n"
+                     % (report["records"], report["outcomes"], dirty_s, health_s, open_task_drops))
     return 0 if issues == 0 else 1
 
 

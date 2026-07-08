@@ -40,6 +40,14 @@ old record obsolete; `prime` and `search` hide it by default (still on disk, sti
 in git history — `search --all` brings it back). One frontmatter line, no graph,
 no TTL daemon: the markdown-shaped answer to temporal decay.
 
+**Task guard — pending tasks don't silently erode.** LLM rewrites of the CORE
+block are lossy: a task nobody closed can just vanish on the next `handover
+set`. Tag it `- [t] <task>` and `set` stamps a `- [t-xxxx] ` id on write; close
+it explicitly with `closed: <reason>` on the line. If a pending id disappears
+anyway, the write still happens (soft, by design — a blocking guard kills a
+headless agent) but it's logged to `task-guard.jsonl` and warned on stderr, and
+`draille status` surfaces the open-drop count.
+
 Each is also a standalone script (`draille/<name>.py`) you can copy anywhere — no install needed.
 
 Storage is just files in your repo:

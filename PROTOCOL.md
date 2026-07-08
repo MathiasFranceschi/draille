@@ -80,6 +80,13 @@ reads; if it wouldn't fit on one screen, something in it belongs in DURABLE
 instead (it's a decision, not live state) or nowhere (it was never load-
 bearing).
 
+**Pending tasks → tag, don't drop.** Any task in the CORE block worth
+tracking across the rewrite gets `- [t] <task>` (`set` stamps a `[t-xxxx]`
+id); close it explicitly with `closed: <reason>` on the line when it's done.
+Never fold a pending task away silently — the guard logs every drop and
+`draille status` surfaces the open count, but the ritual is to close it, not
+to let it get dropped.
+
 **DURABLE → a `draille record` per decision/pattern/failure worth keeping.**
 
 Judgment call: the test is "would the next session (or a different agent)

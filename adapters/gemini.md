@@ -15,6 +15,9 @@ At session end ("session-end"): triage the session into three tiers —
   `draille record <decision|pattern|failure|convention|reference> <foundational|tactical|observational> "<title>" --body "<why + how>"`;
 - **JOURNAL** → append one `## HH:MM · <topic>` block to
   `memory/journal/<YYYY-MM-DD>.md` (append-only, never rewrite prior blocks).
+- **Pending tasks** → tag them `- [t] <task>` in the CORE (an id `[t-xxxx]`
+  is stamped on write); close with `closed: <reason>` on the line — never
+  silently drop (the guard logs drops; `draille status` surfaces them).
 
 Commit `session-end: <YYYY-MM-DD>`. Never auto-push.
 ```
