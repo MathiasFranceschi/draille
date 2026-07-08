@@ -5,6 +5,8 @@
 
 Plain-markdown durable memory for AI agents. Any runtime, local, git-versioned, hand-editable, zero lock-in.
 
+> **Early stage** — actively developed, the API and file formats may still move. Version numbers track features, not maturity.
+
 ## Why « draille »
 
 A *draille* is a transhumance trail in the mountains of southern France — a path
