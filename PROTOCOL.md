@@ -99,6 +99,18 @@ weights by both. If a DURABLE record makes an existing one wrong, record the
 new one with `--supersedes <old-id>` in the same breath — don't leave both
 live.
 
+**Executable remedies live in code, the record only points.** A `failure` or
+`convention` record whose remedy a script could apply without judgment is not
+done when it's written — it's done when the remedy is wired. `record` enforces
+this as a structural default, never a gate: pass `--remedy-impl <path>` (a
+verified file), an opaque ref (a gotcha/task id), or `none --why "<reason>"`
+(explicitly nothing to wire). Omit it and the store's
+`memory/remedy-task-hook` (an executable you provide — it should create a task
+in whatever tracker you use and print its ref) is called to file the debt in
+the same gesture; no hook means `remedy_impl: todo` and a loud stderr warning.
+The write itself always succeeds — a refusal would only teach an agent caller
+to game the field.
+
 **JOURNAL → append a timestamped block, never rewrite.**
 
 ```bash

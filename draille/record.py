@@ -11,9 +11,11 @@ Scope routing: if <root>/memory/scopes.json exists (multi-scope mode), --scope
 is required and maps to a home dir; otherwise (mono-project mode) records land
 in <root>/memory/records and --scope defaults to the root's basename.
 
-Usage: record.py <type> <classification> <title> [--scope S] [--body TEXT] [--evidence-sha SHA] [--dir DIR] [--supersedes ID]
+Usage: record.py <type> <classification> <title> [--scope S] [--body TEXT] [--evidence-sha SHA] [--dir DIR] [--supersedes ID] [--remedy-impl VALUE --why TEXT]
+--remedy-impl (failure/convention only, ADR-0031): 'none' (+ --why), a path, or an opaque
+gotcha/task ref. Omitted or an invalid path -> <root>/memory/remedy-task-hook, else 'todo'.
 """
-import sys, os, json, argparse, hashlib, re, datetime
+import sys, os, json, argparse, hashlib, re, datetime, subprocess
 
 TYPES = ("decision", "pattern", "failure", "convention", "reference")
 CLASSES = ("foundational", "tactical", "observational")
@@ -37,6 +39,21 @@ def slug(s, n=40):
     return (re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")[:n] or "rec")
 
 
+def remedy_hook_ref(root, rid, title, scope):
+    """ADR-0031: no valid --remedy-impl -> ask <root>/memory/remedy-task-hook to make one.
+    Absent/non-executable/failing/silent hook -> 'todo' (never blocks the write)."""
+    hook = os.path.join(root, "memory", "remedy-task-hook")
+    if os.path.isfile(hook) and os.access(hook, os.X_OK):
+        try:
+            r = subprocess.run([hook, rid, title, scope], capture_output=True, text=True, timeout=20)
+            for line in (r.stdout or "").splitlines():
+                if line.strip():
+                    return line.strip()
+        except Exception:
+            pass
+    return "todo"
+
+
 def main(argv):
     p = argparse.ArgumentParser(prog=os.path.basename(argv[0]),
                                 description="Create a durable markdown memory record; prints the new id on stdout.")
@@ -50,10 +67,20 @@ def main(argv):
                    help="id of a record this one replaces (hidden from prime/search ranking)")
     p.add_argument("--dir", default="", dest="dir_override",
                    help="explicit memory dir (escape hatch — bypasses root/scope routing)")
+    p.add_argument("--remedy-impl", default=None, dest="remedy_impl",
+                   help="failure/convention only: 'none' (+ --why), a path, or an opaque ref (gotcha/task id)")
+    p.add_argument("--why", default="", dest="remedy_why",
+                   help="one-line justification, required with --remedy-impl none")
     a = p.parse_args(argv[1:])
     typ, cls, title = a.type, a.classification, a.title
     body, sha, scope, dir_override = a.body, a.sha, a.scope, a.dir_override
     supersedes = a.supersedes
+    # ADR-0031: never refuse the write (caller is often an LLM agent — a refusal invites
+    # gaming). Sole exception: 'none' with no --why is a trivial usage error, not content
+    # refusal. Type-gated here so failure/convention rejects it while other types no-op below.
+    if typ in ("failure", "convention") and a.remedy_impl == "none" and not a.remedy_why:
+        sys.stderr.write("error: --remedy-impl none requires --why (one-line justification)\n")
+        return 2
     # frontmatter + heading are line-based — a multi-line title would inject keys
     # (prime quarantine, or rank forgery via an injected classification: line)
     title = title.replace("\r", " ").replace("\n", " ")
@@ -101,6 +128,30 @@ def main(argv):
         base = os.path.join(root, "memory")
     date = datetime.date.today().isoformat()
     rid = "%s-%s" % (slug(title, 24), hashlib.sha1((title + body).encode()).hexdigest()[:6])
+    # ADR-0031 mvt 3: failure/convention always gets a remedy_impl pointer — 'none'+why,
+    # a verified path, an opaque ref (gotcha/task id) verbatim, or (ABSENT: no flag, or an
+    # invalid path) the remedy-task-hook / 'todo' fallback. Never gates the write itself.
+    remedy_impl_val = remedy_why_val = None
+    if typ in ("failure", "convention"):
+        # frontmatter is line-based — same injection guard as title (a newline in the
+        # value would smuggle a frontmatter key)
+        ri = (a.remedy_impl or "").replace("\r", " ").replace("\n", " ").strip() or None
+        a.remedy_why = a.remedy_why.replace("\r", " ").replace("\n", " ")
+        if ri == "none":
+            remedy_impl_val, remedy_why_val = "none", a.remedy_why
+        elif ri and (ri.startswith("~") or "/" in ri):
+            if os.path.exists(os.path.expanduser(ri)):
+                remedy_impl_val = ri
+            else:
+                sys.stderr.write("warn: --remedy-impl path %r not found -> treated as absent\n" % ri)
+        elif ri:
+            remedy_impl_val = ri  # opaque id (gotcha/task ref) — accepted verbatim
+        if remedy_impl_val is None:
+            remedy_impl_val = remedy_hook_ref(root, rid, title, scope)
+            sys.stderr.write(
+                "⚠ remède non câblé — remedy_impl: %s (record %s). "
+                "Câbler = code/gotcha row, le record n'est qu'un pointeur (ADR-0031).\n"
+                % (remedy_impl_val, rid))
     rdir = os.path.join(base, "records")
     os.makedirs(rdir, exist_ok=True)
     fm = ["id: %s" % rid, "type: %s" % typ, "classification: %s" % cls,
@@ -109,6 +160,10 @@ def main(argv):
           'summary: "%s"' % title[:120].replace('"', "")]
     if supersedes:
         fm.append("supersedes: %s" % supersedes)
+    if remedy_impl_val is not None:
+        fm.append("remedy_impl: %s" % remedy_impl_val)
+        if remedy_why_val:
+            fm.append('remedy_why: "%s"' % remedy_why_val.replace('"', ""))
     md = "---\n" + "\n".join(fm) + "\n---\n\n# " + title + "\n\n" + (body or "") + "\n"
     with open(os.path.join(rdir, "%s-%s-%s.md" % (date, slug(title), rid)), "w", encoding="utf-8") as f:
         f.write(md)

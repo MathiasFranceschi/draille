@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-16
+
+### Added
+
+- `record --remedy-impl` (failure/convention only): structural default that
+  keeps executable remedies out of prose. Value is a verified path, an opaque
+  gotcha/task ref, or `none` (requires `--why`, stored as `remedy_why`).
+  Omitted or an invalid path → `record` calls the store's executable
+  `memory/remedy-task-hook` (`<record-id> <title> <scope>`, 20s timeout, first
+  stdout line = task ref) so the "wire this remedy" debt is filed in the same
+  gesture as the record; no hook → `remedy_impl: todo`. Either way a loud
+  stderr warning lands in the calling agent's context. The write itself never
+  fails on this path — a hard gate would only teach LLM callers to stuff the
+  field (design ratified via a 9-voice council, ADR-0031 in the reference
+  deployment). Other record types are untouched.
+
 ## [1.4.0] - 2026-07-08
 
 ### Added

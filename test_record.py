@@ -176,5 +176,76 @@ with tempfile.TemporaryDirectory() as tmp:
     txt2 = open(os.path.join(rdir, files[0])).read()
     ok("supersedes:" not in txt2, "no --supersedes: no supersedes line written")
 
+# --- ADR-0031 mvt 3: remedy_impl default on failure/convention ---
+with tempfile.TemporaryDirectory() as tmp:
+    env = env_for(tmp)
+
+    # (a) failure, no flag, no hook -> remedy_impl: todo
+    r = run([REC, "failure", "tactical", "no hook no flag"], env)
+    ok(r.returncode == 0, "remedy: (a) failure no hook/flag exit 0")
+    rid = r.stdout.strip()
+    rdir = os.path.join(tmp, "memory", "records")
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl: todo" in txt, "remedy: (a) absent + no hook -> todo")
+    ok("remède non câblé" in r.stderr, "remedy: (a) noisy stderr warning present")
+
+    # (b) failure, hook prints task:42 -> remedy_impl: task:42
+    hookdir = os.path.join(tmp, "memory")
+    os.makedirs(hookdir, exist_ok=True)
+    hook = os.path.join(hookdir, "remedy-task-hook")
+    with open(hook, "w") as hf:
+        hf.write("#!/bin/sh\necho task:42\n")
+    os.chmod(hook, 0o755)
+    r = run([REC, "failure", "tactical", "with hook"], env)
+    rid = r.stdout.strip()
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl: task:42" in txt, "remedy: (b) hook stdout -> remedy_impl ref")
+
+    # (c) hook exits 1 -> todo, record still written
+    with open(hook, "w") as hf:
+        hf.write("#!/bin/sh\nexit 1\n")
+    os.chmod(hook, 0o755)
+    r = run([REC, "failure", "tactical", "hook fails"], env)
+    ok(r.returncode == 0, "remedy: (c) hook exit 1 -> record still written (never refused)")
+    rid = r.stdout.strip()
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl: todo" in txt, "remedy: (c) failing hook -> todo")
+    os.remove(hook)  # done with the fake hook
+
+    # (d) --remedy-impl none without --why -> exit 2, nothing written
+    before = set(os.listdir(rdir))
+    r = run([REC, "failure", "tactical", "none no why", "--remedy-impl", "none"], env)
+    ok(r.returncode == 2, "remedy: (d) none without --why -> exit 2")
+    ok(set(os.listdir(rdir)) == before, "remedy: (d) nothing written on usage error")
+
+    # (e) --remedy-impl none --why "x" -> remedy_impl: none + remedy_why
+    r = run([REC, "failure", "tactical", "none with why", "--remedy-impl", "none", "--why", "x"], env)
+    ok(r.returncode == 0, "remedy: (e) none + why -> exit 0")
+    rid = r.stdout.strip()
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl: none" in txt and 'remedy_why: "x"' in txt, "remedy: (e) none + remedy_why written")
+
+    # (f) path that doesn't exist -> treated as absent (todo, no hook here) + warning
+    r = run([REC, "failure", "tactical", "bad path",
+             "--remedy-impl", "/no/such/path/here"], env)
+    ok(r.returncode == 0, "remedy: (f) invalid path -> exit 0 (never refused)")
+    rid = r.stdout.strip()
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl: todo" in txt, "remedy: (f) invalid path -> falls back to todo")
+    ok("not found" in r.stderr, "remedy: (f) invalid path warns on stderr")
+
+    # (g) type decision -> remedy_impl flag ignored silently, no field written
+    r = run([REC, "decision", "tactical", "not a failure", "--remedy-impl", "none"], env)
+    ok(r.returncode == 0, "remedy: (g) decision type -> exit 0 even with 'none' (type-gated, not active)")
+    rid = r.stdout.strip()
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl" not in txt, "remedy: (g) decision type -> no remedy_impl field at all")
+
 print("record tests: %d passed, %d failed" % (res["p"], res["f"]))
 sys.exit(0 if res["f"] == 0 else 1)
