@@ -10,12 +10,22 @@ Root resolution: $MEMORY_ROOT env var, else the git root of the cwd, else cwd.
 Scope routing: if <root>/memory/scopes.json exists (multi-scope mode), --scope
 is required and maps to a home dir; otherwise (mono-project mode) records land
 in <root>/memory/records and --scope defaults to the root's basename.
+Dynamic routing: if scopes.json has a top-level "_resolver" command string,
+each scope's value is resolved by running `<_resolver> <value>` (single-line
+stdout, abs path ok) instead of used as a literal path; a failing/empty/
+multi-line resolver blocks the write (exit 2). "_resolver" is a reserved
+scope name, never a real scope.
+_resolver only runs for a root listed in ~/.config/draille/trusted-roots
+(no dedicated env override; resolved via $HOME like any user config — a
+hostile $HOME already owns the account and is out of threat model) — an
+untrusted root blocks (exit 2), never silently falls back to the literal
+value.
 
 Usage: record.py <type> <classification> <title> [--scope S] [--body TEXT] [--evidence-sha SHA] [--dir DIR] [--supersedes ID] [--remedy-impl VALUE --why TEXT]
 --remedy-impl (failure/convention only, ADR-0031): 'none' (+ --why), a path, or an opaque
 gotcha/task ref. Omitted or an invalid path -> <root>/memory/remedy-task-hook, else 'todo'.
 """
-import sys, os, json, argparse, hashlib, re, datetime, subprocess
+import sys, os, json, argparse, hashlib, re, datetime, subprocess, shlex
 
 TYPES = ("decision", "pattern", "failure", "convention", "reference")
 CLASSES = ("foundational", "tactical", "observational")
@@ -105,10 +115,68 @@ def main(argv):
         if not scope:
             sys.stderr.write("error: --scope SCOPE required (scopes.json present = multi-scope mode)\n")
             return 2
-        home_dir = homes.get(scope)
+        # "_resolver" is a reserved config key (see below), never a usable scope name
+        home_dir = homes.get(scope) if scope != "_resolver" else None
         if home_dir is None:
             sys.stderr.write("warn: scope %r has no home in scopes.json -> parked in central\n" % scope)
             home_dir = homes.get("central", ".")
+        # Dynamic routing: "_resolver" (a command string) turns the scope's value
+        # (above, a topic NAME rather than a literal path) into an absolute dir by
+        # running `<_resolver> <value>` — never fall back to the literal value on
+        # failure, an ambiguous/malformed dir is worse than a blocked write.
+        resolver = homes.get("_resolver")
+        if isinstance(resolver, str) and resolver.strip():
+            # trust gate: scopes.json may come from a cloned (untrusted) repo — running
+            # an arbitrary "_resolver" command is code execution, so it only fires for a
+            # root the user explicitly opted in. Never fall back to the literal value on
+            # an untrusted root (that's the silent-divergence failure this feature exists
+            # to prevent) — block instead, with both remedies spelled out.
+            root_real = os.path.realpath(root)
+            # no dedicated env override (a clone could point one at a self-listing file).
+            # expanduser still honors $HOME — accepted trust boundary, same as git's
+            # ~/.gitconfig: an attacker who sets $HOME already owns the shell.
+            trusted_path = os.path.expanduser("~/.config/draille/trusted-roots")
+            trusted = set()
+            try:
+                with open(trusted_path, encoding="utf-8") as tf:
+                    for line in tf:
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            trusted.add(line)
+            except OSError:
+                pass
+            if root_real not in trusted:
+                sys.stderr.write(
+                    "error: scopes.json has \"_resolver\" but root %r is not trusted (%s).\n"
+                    "  to trust it:      echo %s >> %s\n"
+                    "  or to opt out:    remove \"_resolver\" from scopes.json\n"
+                    % (root_real, trusted_path, root_real, trusted_path))
+                return 2
+            if not isinstance(home_dir, str):
+                sys.stderr.write(
+                    "error: scope %r value %r is not a string (scopes.json) — can't pass to _resolver\n"
+                    % (scope, home_dir))
+                return 2
+            try:
+                cmd = shlex.split(resolver) + [home_dir]
+            except ValueError as e:
+                sys.stderr.write("error: _resolver %r is malformed (bad quoting): %s\n" % (resolver, e))
+                return 2
+            try:
+                rr = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            except (OSError, subprocess.SubprocessError) as e:
+                sys.stderr.write(
+                    "error: _resolver %r failed to run for scope %r (value %r): %s\n"
+                    % (resolver, scope, home_dir, e))
+                return 2
+            out_lines = (rr.stdout or "").splitlines()
+            if rr.returncode != 0 or len(out_lines) != 1 or not out_lines[0].strip():
+                sys.stderr.write(
+                    "error: _resolver %r did not resolve scope %r (value %r) to a single "
+                    "path (exit=%s stdout=%r stderr=%r)\n"
+                    % (resolver, scope, home_dir, rr.returncode, rr.stdout, rr.stderr))
+                return 2
+            home_dir = out_lines[0].strip()
         # scopes.json may come from a cloned (untrusted) repo — the resolved base
         # must stay inside root. realpath normalizes .., absolute/rooted/drive-
         # relative paths, and symlinks; a different Windows drive raises ValueError

@@ -27,7 +27,12 @@ Plain-markdown durable memory for AI agents. Four stdlib-only tools in
     a multi-line title = key injection / rank forgery).
 - **Root contract:** `$MEMORY_ROOT` env > git root of cwd > cwd. Mono-project
   (no scopes.json): `--scope` optional, writes `<root>/memory/records/`.
-  Multi-scope (scopes.json present): `--scope` required.
+  Multi-scope (scopes.json present): `--scope` required. Optional
+  `"_resolver"` key (reserved, never a scope): scope values become topic
+  names resolved by running `<_resolver> <value>` at write time — gated on
+  the root being listed in `~/.config/draille/trusted-roots` (untrusted
+  scopes.json must never gain command execution), and any resolution failure
+  blocks the write (exit 2, no literal fallback). See CHANGELOG 1.6.0.
 - **Append-only outcomes**, keyed by immutable id. Git is the WORM/recovery
   layer. Never rewrite records in place except by the same id (idempotence).
 

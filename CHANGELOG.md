@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-07-17
+
+### Added
+
+- `scopes.json` `"_resolver"` (dynamic scope routing): when set to a command
+  string, each scope's value is a topic NAME resolved to a directory at write
+  time by running `<_resolver> <value>` (single-line stdout, absolute path
+  allowed). Moving a scoped directory no longer requires editing scopes.json
+  as long as its name survives. Resolution failure (non-zero exit, empty or
+  multi-line output, malformed resolver quoting, non-string value) blocks the
+  write (exit 2) — never a silent fallback to the literal value. Trust gate:
+  `_resolver` only executes for roots listed in
+  `~/.config/draille/trusted-roots` (a cloned repo's scopes.json is untrusted
+  input and must not gain command execution; no dedicated env override —
+  `$HOME` is the accepted trust boundary, same as `~/.gitconfig`). Untrusted
+  root + `_resolver` = blocking error naming both remedies. The existing
+  containment check still applies to the resolved path. Absent `_resolver` =
+  literal-path behavior, byte-identical. Design ratified via a 9-voice
+  council (silent-fallback veto) in the reference deployment.
+
 ## [1.5.0] - 2026-07-16
 
 ### Added
