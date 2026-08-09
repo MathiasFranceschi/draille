@@ -2,7 +2,7 @@
 """Tests for prime.py — explicit-dir mode unchanged (rank+budget, quarantine, orphan ignored),
 plus the new default mode: no-arg recursive scan under MEMORY_ROOT / git-root ascension,
 with the outcomes log centralized at <root>/memory/outcomes.jsonl regardless of scope home."""
-import subprocess, tempfile, os, sys, json
+import subprocess, tempfile, os, sys, json, re, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PRIME = os.path.join(HERE, "draille", "prime.py")
@@ -166,11 +166,76 @@ def glob_metachar_root_mode():
            "glob-metachar root: record under a '[a]' path is still found (glob.escape)")
 
 
+def _score(stdout):
+    return int(re.search(r"score=(-?\d+)", stdout).group(1))
+
+
+def decay_mode():
+    """A success event's contribution decays with age (half-life, default 45d):
+    an old success on a record must score lower than a recent success on an
+    otherwise-identical record."""
+    def digest_for(date):
+        with tempfile.TemporaryDirectory() as tmp:
+            rdir = os.path.join(tmp, "records")
+            os.makedirs(rdir)
+            with open(os.path.join(rdir, "r.md"), "w") as f:
+                f.write("---\nid: dk\ntype: pattern\nclassification: observational\nsummary: D\n---\n# d\n")
+            with open(os.path.join(tmp, "outcomes.jsonl"), "w") as f:
+                f.write(json.dumps({"id": "dk", "status": "success", "sha": "x", "date": date}) + "\n")
+            return subprocess.run([sys.executable, PRIME, tmp], capture_output=True, text=True).stdout
+
+    old_date = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
+    recent_date = datetime.date.today().isoformat()
+    ok(_score(digest_for(old_date)) < _score(digest_for(recent_date)),
+       "decay: a year-old success event scores lower than a fresh one on an identical record")
+
+
+def cap_mode():
+    """Successes beyond DRAILLE_PRIME_MAX_SUCCESS_CREDITS stop raising the score,
+    while the raw ★ transparency counter stays uncapped."""
+    with tempfile.TemporaryDirectory() as tmp:
+        rdir = os.path.join(tmp, "records")
+        os.makedirs(rdir)
+        with open(os.path.join(rdir, "r.md"), "w") as f:
+            f.write("---\nid: ck\ntype: pattern\nclassification: observational\nsummary: C\n---\n# c\n")
+        env = os.environ.copy()
+        env["DRAILLE_PRIME_MAX_SUCCESS_CREDITS"] = "2"
+        today = datetime.date.today().isoformat()
+        ocp = os.path.join(tmp, "outcomes.jsonl")
+        with open(ocp, "w") as f:
+            f.write(json.dumps({"id": "ck", "status": "success", "sha": "a", "date": today}) + "\n")
+            f.write(json.dumps({"id": "ck", "status": "success", "sha": "b", "date": today}) + "\n")
+        r2 = subprocess.run([sys.executable, PRIME, tmp], capture_output=True, text=True, env=env)
+
+        with open(ocp, "a") as f:
+            f.write(json.dumps({"id": "ck", "status": "success", "sha": "c", "date": today}) + "\n")
+        r3 = subprocess.run([sys.executable, PRIME, tmp], capture_output=True, text=True, env=env)
+
+        ok(_score(r2.stdout) == _score(r3.stdout),
+           "cap: a 3rd success beyond MAX_SUCCESS_CREDITS=2 does not raise the score")
+        ok("★3" in r3.stdout,
+           "cap: raw ★ transparency counter still shows the uncapped total (3)")
+
+
+def machine_mode():
+    """outcome.py stamps a 'machine' key on every appended event (cross-machine audit)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        r = subprocess.run([sys.executable, OUT, "mk", "success", "--dir", tmp],
+                           capture_output=True, text=True)
+        ok(r.returncode == 0, "machine: outcome.py append exit 0")
+        with open(os.path.join(tmp, "outcomes.jsonl")) as f:
+            ev = json.loads(f.readline())
+        ok("machine" in ev, "machine: appended outcome event carries a 'machine' key")
+
+
 explicit_dir_mode()
 default_root_mode()
 ascension_mode()
 supersession_mode()
 glob_metachar_root_mode()
+decay_mode()
+cap_mode()
+machine_mode()
 
 print("prime tests: %d passed, %d failed" % (P, F))
 sys.exit(0 if F == 0 else 1)

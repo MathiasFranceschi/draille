@@ -10,7 +10,7 @@ Usage: outcome.py <record-id> <success|failure|partial> [--sha SHA] [--note TEXT
 
 Scope-blind: the log is central and id-keyed regardless of scope homes.
 """
-import sys, os, json, argparse, datetime
+import sys, os, json, argparse, datetime, socket
 
 STATUSES = ("success", "failure", "partial")
 
@@ -44,7 +44,8 @@ def main(argv):
         base = os.path.join(memory_root(), "memory")
     os.makedirs(base, exist_ok=True)
     event = {"id": rid, "status": status,
-             "sha": sha, "date": datetime.date.today().isoformat()}
+             "sha": sha, "date": datetime.date.today().isoformat(),
+             "machine": socket.gethostname()}
     if note:
         event["note"] = note
     path = os.path.join(base, "outcomes.jsonl")

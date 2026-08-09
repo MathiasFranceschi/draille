@@ -18,11 +18,23 @@ Scope-blind by design: scans every scope home and reads the one central
 outcomes log — scopes.json only changes record.py's routing.
 
 Usage: prime.py [MEMORY_DIR] [--dir MEMORY_DIR]   (explicit dir has records/ + outcomes.jsonl; overrides root scan)
+
+Outcome-score decay: a `success`/`failure` event's weight decays with age
+(half-life DRAILLE_PRIME_HALF_LIFE_DAYS, default 45 days) instead of being a
+permanent flat bonus. Without decay, a record cited once early on keeps
+outranking everything else indefinitely regardless of topic -- prime.py has
+no query at session start (unlike search.py), so nothing else corrects for
+that runaway popularity signal. Success credits are also capped at
+DRAILLE_PRIME_MAX_SUCCESS_CREDITS (default 3, most-recent first) so a single
+record can't accumulate an unbounded lead. Failures are not capped (a safety
+signal, not a popularity one) but still decay.
 """
-import sys, os, json, glob
+import sys, os, json, glob, datetime
 
 CLASS_W = {"foundational": 50, "tactical": 20, "observational": 10}
 BUDGET = 6000  # bytes of digest
+HALF_LIFE_DAYS = float(os.environ.get("DRAILLE_PRIME_HALF_LIFE_DAYS", "45"))
+MAX_SUCCESS_CREDITS = int(os.environ.get("DRAILLE_PRIME_MAX_SUCCESS_CREDITS", "3"))
 
 
 def memory_root():
@@ -77,9 +89,12 @@ def load_records(records_dir):
 
 
 def load_outcomes(path):
-    tally = {}
+    """id -> list of (status, date_str) events, most-recent-first per status not guaranteed
+    (sorted in score()). Unlike search.py's aggregate tally, prime.py needs per-event dates
+    to decay each one individually."""
+    events = {}
     if not os.path.exists(path):
-        return tally
+        return events
     with open(path, encoding="utf-8") as f:
         for ln in f:
             ln = ln.strip()
@@ -90,18 +105,41 @@ def load_outcomes(path):
             except Exception:                        # GUARD: skip malformed line, never crash
                 continue
             rid, st = o.get("id"), o.get("status")
-            if not rid:
+            if not rid or st not in ("success", "failure", "partial"):
                 continue
-            t = tally.setdefault(rid, {"success": 0, "failure": 0, "partial": 0})
-            if st in t:
-                t[st] += 1
-    return tally
+            events.setdefault(rid, []).append((st, o.get("date", "")))
+    return events
 
 
-def score(rec, tally):
-    t = tally.get(rec.get("id"), {})
+def _age_days(date_str, today):
+    try:
+        d = datetime.date.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        return 0.0                                    # unparseable/missing date -> treat as fresh
+    return max(0.0, (today - d).days)
+
+
+def _decay(date_str, today):
+    if HALF_LIFE_DAYS <= 0:
+        return 1.0
+    return 0.5 ** (_age_days(date_str, today) / HALF_LIFE_DAYS)
+
+
+def outcome_component(rid, events, today):
+    """Decayed, capped outcome score: at most MAX_SUCCESS_CREDITS successes count (most-recent
+    first, so an old record still earns its cap from its LATEST outcomes, not its first ones),
+    each worth 30 decayed points. Failures are uncapped (a safety signal, not a popularity one)
+    but still decay, worth 20 decayed points each."""
+    evs = events.get(rid, [])
+    successes = sorted((d for st, d in evs if st == "success"), reverse=True)[:MAX_SUCCESS_CREDITS]
+    failures = [d for st, d in evs if st == "failure"]
+    return (sum(_decay(d, today) for d in successes) * 30
+            - sum(_decay(d, today) for d in failures) * 20)
+
+
+def score(rec, events, today):
     return (CLASS_W.get(rec.get("classification", "observational"), 10)
-            + t.get("success", 0) * 30 - t.get("failure", 0) * 20)
+            + outcome_component(rec.get("id"), events, today))
 
 
 def main(argv):
@@ -119,7 +157,8 @@ def main(argv):
         r, q = load_records(d)
         recs += r
         quarantined += q
-    tally = load_outcomes(outcomes_path)
+    events = load_outcomes(outcomes_path)
+    today = datetime.date.today()
     # Obsolescence by supersession: a record naming another via `supersedes: <id>` retires
     # that id from the ranking (dead for prime/search, still on disk = git/history). No
     # recursive resolution needed: the hidden set is just every id that appears as *someone
@@ -129,14 +168,16 @@ def main(argv):
     recs = [r for r in recs if r.get("id") not in superseded_ids]
     # orphan outcomes (an id with no record, e.g. its markdown was deleted) are ignored by
     # construction: we only ever emit `recs`, and score() reads the tally by the record's own id.
-    recs.sort(key=lambda r: score(r, tally), reverse=True)
+    recs.sort(key=lambda r: score(r, events, today), reverse=True)
     out = ["# draille — durable memory (prime)\n"]
     size = len(out[0])
     for r in recs:
-        star = tally.get(r["id"], {}).get("success", 0)
+        # raw, uncapped, undecayed success count — human-transparency counter,
+        # deliberately separate from the ranking score below
+        star = sum(1 for st, _ in events.get(r["id"], []) if st == "success")
         block = ("## [%s] %s\n   id:%s | %s | ★%d | score=%d%s\n" % (
             r.get("type", "?"), r["_title"], r["id"], r.get("classification", "?"),
-            star, score(r, tally), (" | " + r["summary"]) if r.get("summary") else ""))
+            star, score(r, events, today), (" | " + r["summary"]) if r.get("summary") else ""))
         if size + len(block) > BUDGET:
             out.append("…(capped at %dB — %d records total)\n" % (BUDGET, len(recs)))
             break

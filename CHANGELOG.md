@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `prime.py` outcome scoring: a success/failure event's contribution now
+  decays with age (half-life `DRAILLE_PRIME_HALF_LIFE_DAYS`, default 45 days)
+  instead of being a permanent flat bonus, and successes are capped at
+  `DRAILLE_PRIME_MAX_SUCCESS_CREDITS` (default 3, most-recent first) per
+  record. Without this, a record cited once early on could outrank
+  everything else indefinitely regardless of topic — `prime.py` has no query
+  at session start (unlike `search.py`), so nothing else corrected for that
+  runaway popularity signal. The digest's `★N` count is unaffected: it still
+  shows the raw, uncapped, undecayed success total as a human-transparency
+  counter separate from the ranking score.
+
+### Added
+
+- `outcome.py` now stamps a `machine` key (hostname) on every appended
+  event, for cross-machine audit of `outcomes.jsonl`.
+
 ## [1.6.0] - 2026-07-17
 
 ### Added
