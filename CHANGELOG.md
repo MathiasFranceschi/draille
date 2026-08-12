@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-08-12
+
+### Added
+
+- `draille expire <id>`: the first real retraction path for a durable record.
+  Moves the record's file from `memory/records/` to a sibling `memory/expired/`
+  (creating it as needed) — never deletes. `search.py`/`prime.py` only glob
+  `memory/records/*.md`, so an expired record stops surfacing structurally, with
+  no filter added to either scanner. An unknown id is a hard error (exit
+  non-zero); expiring an already-expired id is a no-op with a clear message.
+  Appends `{date, id, action: "expire"}` to the central, scope-blind
+  `memory/outcomes.jsonl` (same log/mechanism as `outcome.py`).
+
+### Changed
+
+- `record.py` no longer writes `relates_to: []` into new records' frontmatter —
+  the field was never populated by any writer (99.6% empty across the corpus),
+  a promise nothing kept. Existing records that already carry `relates_to`
+  remain parsable everywhere (no reader change).
+- Docs (README/PROTOCOL): `draille expire` documented as the retraction path;
+  hand-setting `status: archived` is explicitly called out as *not* a
+  retraction mechanism — no scanner filters on it.
+
 ## [1.6.1] - 2026-08-12
 
 ### Changed

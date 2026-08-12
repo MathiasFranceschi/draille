@@ -1,9 +1,9 @@
 # PROTOCOL — the draille session ritual
 
-draille (`record`, `prime`, `outcome`, `search`, `handover`, `doctor`, `status`,
-`migrate`, `init`) gives you the primitives: write a record, rank a digest, log
-an outcome, search, read/write live core state, health-check the store, check
-persistence. None of that is a
+draille (`record`, `prime`, `outcome`, `search`, `expire`, `handover`, `doctor`,
+`status`, `migrate`, `init`) gives you the primitives: write a record, rank a
+digest, log an outcome, search, retire a record, read/write live core state,
+health-check the store, check persistence. None of that is a
 ritual by itself — this document is. It's the ordered sequence any runtime
 (Claude Code, Cursor, Codex, a human at a terminal) runs around those
 primitives, session after session, so memory actually accumulates instead of
@@ -98,6 +98,16 @@ of what changes next; `tactical` = holds for the current approach;
 weights by both. If a DURABLE record makes an existing one wrong, record the
 new one with `--supersedes <old-id>` in the same breath — don't leave both
 live.
+
+**Retiring → `draille expire <id>`, the only real retraction path.** A record
+that's simply wrong (not superseded, just shouldn't have been written, or its
+topic is gone) needs to stop surfacing entirely — `expire` moves it from
+`memory/records/` to `memory/expired/`, never deletes it (undo: move it back
+by hand). `search` and `prime` only scan `memory/records/*.md`, so an expired
+record structurally stops being found — no flag to remember, nothing to keep
+in sync between scanners. Hand-setting `status: archived` in the frontmatter
+does **not** retire a record — no scanner filters on that field, so it still
+ranks and still surfaces; don't rely on it.
 
 **Executable remedies live in code, the record only points.** A `failure` or
 `convention` record whose remedy a script could apply without judgment is not

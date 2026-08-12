@@ -297,7 +297,7 @@ def main(argv):
     rdir = os.path.join(base, "records")
     os.makedirs(rdir, exist_ok=True)
     fm = ["id: %s" % rid, "type: %s" % typ, "classification: %s" % cls,
-          "scope: %s" % scope, 'evidence_sha: "%s"' % sha, "relates_to: []",
+          "scope: %s" % scope, 'evidence_sha: "%s"' % sha,
           "role: memory-record", "created: %s" % date,
           'summary: "%s"' % title[:120].replace('"', "")]
     if supersedes:

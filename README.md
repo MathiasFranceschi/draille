@@ -30,6 +30,7 @@ Stdlib-only Python tools, no dependencies:
 | `draille prime` | rank all records (classification weight + outcome tally) into a budgeted digest for session start |
 | `draille outcome` | append "this record demonstrably helped/failed" to an append-only log, keyed by immutable id |
 | `draille search` | ranked full-text search over records (pure scan, no index) — or delegate to your own engine via `DRAILLE_SEARCH_CMD` ([BYO backends](docs/backends.md)) |
+| `draille expire` | retire a record: move it from `memory/records` to `memory/expired` — the only retrieval-blocking retraction path (never deletes) |
 | `draille handover` | show/set the CORE block of `memory/HANDOVER.md` (atomic, Letta-style core memory) |
 | `draille doctor` | health-check the store: corrupt records, orphan outcomes, dangling `supersedes`, unsafe scope homes, duplicate ids (exit 1 on any issue — CI-friendly) |
 | `draille status` | fast persistence + health check — is memory uncommitted (dirty) or corrupt? exit 1 if so (for hooks/gates: `draille status || persist`) |
@@ -41,6 +42,16 @@ the project moved to SQLite. `draille record … --supersedes <old-id>` marks th
 old record obsolete; `prime` and `search` hide it by default (still on disk, still
 in git history — `search --all` brings it back). One frontmatter line, no graph,
 no TTL daemon: the markdown-shaped answer to temporal decay.
+
+**Expiring — the actual retraction path.** Superseding marks a record stale but
+still findable (`search --all`); sometimes a record needs to stop being found at
+all — wrong from the start, or genuinely dead. `draille expire <id>` moves the
+file from `memory/records/` to a sibling `memory/expired/`, never deletes it.
+`search` and `prime` only glob `memory/records/*.md`, so an expired record stops
+surfacing by construction — no filter to keep in sync in either scanner. Setting
+`status: archived` by hand in the frontmatter is **not** a retraction mechanism:
+no scanner reads or filters on it, so an "archived" record still ranks and still
+surfaces. `expire` is the one path that structurally works.
 
 **Task guard — pending tasks don't silently erode.** LLM rewrites of the CORE
 block are lossy: a task nobody closed can just vanish on the next `handover

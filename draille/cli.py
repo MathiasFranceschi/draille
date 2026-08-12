@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """draille — unified CLI. Dispatches to the standalone tools.
 
-Usage: draille <init|record|prime|outcome|search|handover|doctor|status|migrate> [args...]
+Usage: draille <init|record|prime|outcome|search|expire|handover|doctor|status|migrate> [args...]
 Each subcommand is also a standalone script (draille/<name>.py) — same args.
 """
 import sys
 
-from . import record, prime, outcome, migrate, init, search, handover, doctor, status
+from . import record, prime, outcome, migrate, init, search, expire, handover, doctor, status
 
 CMDS = {"record": record.main, "prime": prime.main,
         "outcome": outcome.main, "migrate": migrate.main,
-        "init": init.main, "search": search.main, "handover": handover.main,
-        "doctor": doctor.main, "status": status.main}
+        "init": init.main, "search": search.main, "expire": expire.main,
+        "handover": handover.main, "doctor": doctor.main, "status": status.main}
 
 
 def main(argv=None):
