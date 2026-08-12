@@ -23,7 +23,11 @@ value.
 
 Usage: record.py <type> <classification> <title> [--scope S] [--body TEXT] [--evidence-sha SHA] [--dir DIR] [--supersedes ID] [--remedy-impl VALUE --why TEXT]
 --remedy-impl (failure/convention only, ADR-0031): 'none' (+ --why), a path, or an opaque
-gotcha/task ref. Omitted or an invalid path -> <root>/memory/remedy-task-hook, else 'todo'.
+gotcha/task ref. A relative path is resolved against the memory root AND (when
+different — e.g. MEMORY_ROOT points at a vault while cwd sits in a code repo)
+the git root of the process cwd, so a repo-relative remedy resolves whichever
+side it lives on. Omitted or an invalid path -> <root>/memory/remedy-task-hook,
+else 'todo'.
 """
 import sys, os, json, argparse, hashlib, re, datetime, subprocess, shlex
 
@@ -42,6 +46,18 @@ def memory_root():
         parent = os.path.dirname(d)
         if parent == d:
             return os.getcwd()
+        d = parent
+
+
+def git_root(start):
+    """Nearest ancestor of `start` containing .git, else None."""
+    d = start
+    while True:
+        if os.path.isdir(os.path.join(d, ".git")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
         d = parent
 
 
@@ -208,10 +224,29 @@ def main(argv):
         if ri == "none":
             remedy_impl_val, remedy_why_val = "none", a.remedy_why
         elif ri and (ri.startswith("~") or "/" in ri):
-            if os.path.exists(os.path.expanduser(ri)):
+            # Anchor relative paths on the memory root, not the process CWD: a
+            # repo-relative path (e.g. "system/foo.md") is only CWD-valid when
+            # invoked from the repo root — from any subdirectory it silently
+            # resolved to absent and fell through to the task-hook fallback.
+            # A second candidate — the git root of the process cwd — covers the
+            # majority case where MEMORY_ROOT is pinned to a separate vault (so
+            # `root` above is the vault, not the code repo the remedy lives in):
+            # without it, every code-side remedy for a vault-backed scope was
+            # silently marked absent and degraded to a phantom remedy task.
+            expanded = os.path.expanduser(ri)
+            if os.path.isabs(expanded):
+                candidates = [expanded]
+            else:
+                candidates = [os.path.join(root, expanded)]
+                cwd_root = git_root(os.getcwd())
+                if cwd_root and os.path.realpath(cwd_root) != os.path.realpath(root):
+                    candidates.append(os.path.join(cwd_root, expanded))
+            if any(os.path.exists(c) for c in candidates):
                 remedy_impl_val = ri
             else:
-                sys.stderr.write("warn: --remedy-impl path %r not found -> treated as absent\n" % ri)
+                sys.stderr.write(
+                    "warn: --remedy-impl path %r not found (checked %s) -> treated as absent\n"
+                    % (ri, ", ".join(repr(c) for c in candidates)))
         elif ri:
             remedy_impl_val = ri  # opaque id (gotcha/task ref) — accepted verbatim
         if remedy_impl_val is None:

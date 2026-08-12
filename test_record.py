@@ -247,5 +247,49 @@ with tempfile.TemporaryDirectory() as tmp:
     txt = open(os.path.join(rdir, f)).read()
     ok("remedy_impl" not in txt, "remedy: (g) decision type -> no remedy_impl field at all")
 
+    # (h) repo-relative path (contains "/", so it hits the path-exists check,
+    # not the opaque-id branch), invoked from a subdirectory of the root -> must
+    # resolve against the root, not the CWD (regression: was silently "not found")
+    os.makedirs(os.path.join(tmp, "code"), exist_ok=True)
+    existing = os.path.join(tmp, "code", "fix.sh")
+    with open(existing, "w") as ef:
+        ef.write("#!/bin/sh\n")
+    subdir = os.path.join(tmp, "sub", "nested")
+    os.makedirs(subdir, exist_ok=True)
+    r = run([REC, "failure", "tactical", "repo-relative remedy from subdir",
+             "--remedy-impl", "code/fix.sh"], env, cwd=subdir)
+    ok(r.returncode == 0, "remedy: (h) repo-relative path from subdir -> exit 0")
+    ok("not found" not in r.stderr, "remedy: (h) repo-relative path from subdir -> no false warning")
+    rid = r.stdout.strip()
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl: code/fix.sh" in txt,
+       "remedy: (h) repo-relative path resolved against root, not CWD -> accepted verbatim")
+
+# (i) MEMORY_ROOT pinned to a vault, cwd sits in a separate code repo, remedy path
+# lives repo-relative in the code repo (not under the vault) — regression: was
+# always resolved against the vault root only, so a real, wired repo-side remedy
+# was silently marked absent and degraded to a phantom remedy task.
+with tempfile.TemporaryDirectory() as tmp:
+    vault = os.path.join(tmp, "vault")
+    os.makedirs(vault, exist_ok=True)
+    env = env_for(vault)
+    repo = os.path.join(tmp, "code-repo")
+    os.makedirs(os.path.join(repo, ".git"), exist_ok=True)
+    os.makedirs(os.path.join(repo, "system", "scripts"), exist_ok=True)
+    with open(os.path.join(repo, "system", "scripts", "fix.sh"), "w") as ef:
+        ef.write("#!/bin/sh\n")
+    r = run([REC, "failure", "tactical", "vault-root vs repo-relative remedy",
+             "--remedy-impl", "system/scripts/fix.sh"], env, cwd=repo)
+    ok(r.returncode == 0, "remedy: (i) vault MEMORY_ROOT + repo-relative remedy -> exit 0")
+    ok("not found" not in r.stderr,
+       "remedy: (i) vault MEMORY_ROOT + repo-relative remedy -> no false warning")
+    rdir = os.path.join(vault, "memory", "records")
+    rid = r.stdout.strip()
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl: system/scripts/fix.sh" in txt,
+       "remedy: (i) repo-relative remedy resolved against cwd's git root, not just MEMORY_ROOT")
+
 print("record tests: %d passed, %d failed" % (res["p"], res["f"]))
 sys.exit(0 if res["f"] == 0 else 1)
