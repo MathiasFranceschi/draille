@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for search.py — ranked, stateless search over memory records."""
-import subprocess, tempfile, os, sys, json
+import subprocess, tempfile, os, sys, json, re, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SEARCH = os.path.join(HERE, "draille", "search.py")
@@ -256,6 +256,61 @@ def superseded_hit_hidden_by_default():
            "supersession: --all reincludes the superseded hit")
 
 
+def _score(stdout):
+    return int(re.search(r"score=(-?\d+)", stdout).group(1))
+
+
+def decay_attenuates_outcome_bonus():
+    """A year-old success event must score lower than a fresh one on an identical record —
+    same decay mechanism as prime.py (011c2d4), ported: search.py used to add a flat,
+    undecayed +2/success bonus."""
+    def score_for(date):
+        with tempfile.TemporaryDirectory() as tmp:
+            rdir = os.path.join(tmp, "records")
+            os.makedirs(rdir)
+            with open(os.path.join(rdir, "r.md"), "w") as f:
+                f.write("---\nid: dk\ntype: pattern\nclassification: observational\nsummary: none\n"
+                        "---\n# widget decay\n")
+            with open(os.path.join(tmp, "outcomes.jsonl"), "w") as f:
+                f.write(json.dumps({"id": "dk", "status": "success", "sha": "x", "date": date}) + "\n")
+            r = subprocess.run([sys.executable, SEARCH, "widget", "--dir", tmp],
+                                capture_output=True, text=True)
+            return _score(r.stdout)
+
+    old_date = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
+    recent_date = datetime.date.today().isoformat()
+    ok(score_for(old_date) < score_for(recent_date),
+       "decay: a year-old success event scores lower than a fresh one on an identical record")
+
+
+def cap_limits_success_credits():
+    """Successes beyond DRAILLE_PRIME_MAX_SUCCESS_CREDITS stop raising the score — same cap
+    as prime.py, ported to search.py's own +2/success scale."""
+    with tempfile.TemporaryDirectory() as tmp:
+        rdir = os.path.join(tmp, "records")
+        os.makedirs(rdir)
+        with open(os.path.join(rdir, "r.md"), "w") as f:
+            f.write("---\nid: ck\ntype: pattern\nclassification: observational\nsummary: none\n"
+                    "---\n# widget cap\n")
+        env = os.environ.copy()
+        env["DRAILLE_PRIME_MAX_SUCCESS_CREDITS"] = "2"
+        today = datetime.date.today().isoformat()
+        ocp = os.path.join(tmp, "outcomes.jsonl")
+        with open(ocp, "w") as f:
+            f.write(json.dumps({"id": "ck", "status": "success", "sha": "a", "date": today}) + "\n")
+            f.write(json.dumps({"id": "ck", "status": "success", "sha": "b", "date": today}) + "\n")
+        r2 = subprocess.run([sys.executable, SEARCH, "widget", "--dir", tmp],
+                            capture_output=True, text=True, env=env)
+
+        with open(ocp, "a") as f:
+            f.write(json.dumps({"id": "ck", "status": "success", "sha": "c", "date": today}) + "\n")
+        r3 = subprocess.run([sys.executable, SEARCH, "widget", "--dir", tmp],
+                            capture_output=True, text=True, env=env)
+
+        ok(_score(r2.stdout) == _score(r3.stdout),
+           "cap: a 3rd success beyond MAX_SUCCESS_CREDITS=2 does not raise the score")
+
+
 title_beats_body()
 outcome_boosts_rank()
 absent_term_no_matches()
@@ -267,6 +322,8 @@ engine_builtin_ignores_env()
 env_cmd_hostile()
 dir_forces_builtin()
 superseded_hit_hidden_by_default()
+decay_attenuates_outcome_bonus()
+cap_limits_success_credits()
 
 print("search tests: %d passed, %d failed" % (P, F))
 sys.exit(0 if F == 0 else 1)

@@ -291,5 +291,59 @@ with tempfile.TemporaryDirectory() as tmp:
     ok("remedy_impl: system/scripts/fix.sh" in txt,
        "remedy: (i) repo-relative remedy resolved against cwd's git root, not just MEMORY_ROOT")
 
+# (j) opaque gotcha-id ref: warn-only lookup against $DRAILLE_GOTCHAS_TSV (never blocks)
+with tempfile.TemporaryDirectory() as tmp:
+    env = env_for(tmp)
+    tsv = os.path.join(tmp, "gotchas.tsv")
+    with open(tsv, "w") as tf:
+        tf.write("# comment\nid\ttool_glob\tfield\tmatch\tpattern\tskip_if\taction\tmessage\n")
+        tf.write("known-gotcha\tBash\tcommand\tsubstr\tfoo\t-\twarn\tmsg\n")
+    env["DRAILLE_GOTCHAS_TSV"] = tsv
+    rdir = os.path.join(tmp, "memory", "records")
+
+    r = run([REC, "failure", "tactical", "known gotcha ref", "--remedy-impl", "known-gotcha"], env)
+    ok(r.returncode == 0, "remedy: (j) known gotcha-id -> exit 0")
+    ok("not found in gotchas TSV" not in r.stderr, "remedy: (j) known gotcha-id -> no warning")
+    rid = r.stdout.strip()
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl: known-gotcha" in txt, "remedy: (j) known gotcha-id accepted verbatim")
+
+    r2 = run([REC, "failure", "tactical", "unknown gotcha ref", "--remedy-impl", "made-up-gotcha"], env)
+    ok(r2.returncode == 0, "remedy: (j) unknown gotcha-id -> exit 0 (never refused)")
+    ok("not found in gotchas TSV" in r2.stderr, "remedy: (j) unknown gotcha-id -> warns on stderr")
+
+    # no TSV configured/present -> skip silently (package stays generic)
+    env2 = env_for(tmp)
+    env2["DRAILLE_GOTCHAS_TSV"] = os.path.join(tmp, "nope.tsv")
+    r3 = run([REC, "failure", "tactical", "no tsv configured", "--remedy-impl", "anything-goes"], env2)
+    ok(r3.returncode == 0 and "not found in gotchas TSV" not in r3.stderr,
+       "remedy: (j) TSV absent -> skipped silently, no warning")
+
+# (k) plain-digit ref reads as a task-id -> warn "unverifiable" (no generic queue store)
+with tempfile.TemporaryDirectory() as tmp:
+    env = env_for(tmp)
+    r = run([REC, "failure", "tactical", "task id ref", "--remedy-impl", "42"], env)
+    ok(r.returncode == 0, "remedy: (k) digit ref -> exit 0 (never refused)")
+    ok("unverifiable" in r.stderr, "remedy: (k) digit ref -> warns unverifiable task-id")
+    rdir = os.path.join(tmp, "memory", "records")
+    rid = r.stdout.strip()
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl: 42" in txt, "remedy: (k) digit ref accepted verbatim")
+
+# (l) 'none <text>' glued together (--why concatenation bug) -> warns, still accepted verbatim
+with tempfile.TemporaryDirectory() as tmp:
+    env = env_for(tmp)
+    r = run([REC, "failure", "tactical", "glued none", "--remedy-impl", "none some/reason here"], env)
+    ok(r.returncode == 0, "remedy: (l) glued 'none <why>' -> exit 0 (never refused)")
+    ok("CLI concatenation bug" in r.stderr, "remedy: (l) glued 'none <why>' -> warns of the bug")
+    rdir = os.path.join(tmp, "memory", "records")
+    rid = r.stdout.strip()
+    f = [x for x in os.listdir(rdir) if rid in x][0]
+    txt = open(os.path.join(rdir, f)).read()
+    ok("remedy_impl: none some/reason here" in txt,
+       "remedy: (l) glued value kept verbatim (warn-only, no silent rewrite)")
+
 print("record tests: %d passed, %d failed" % (res["p"], res["f"]))
 sys.exit(0 if res["f"] == 0 else 1)

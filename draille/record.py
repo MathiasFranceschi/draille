@@ -27,7 +27,12 @@ gotcha/task ref. A relative path is resolved against the memory root AND (when
 different — e.g. MEMORY_ROOT points at a vault while cwd sits in a code repo)
 the git root of the process cwd, so a repo-relative remedy resolves whichever
 side it lives on. Omitted or an invalid path -> <root>/memory/remedy-task-hook,
-else 'todo'.
+else 'todo'. An opaque ref is warn-only validated, never blocking: a gotcha-id
+is looked up in the TSV named by $DRAILLE_GOTCHAS_TSV (default
+~/workspace-os/system/gotchas.tsv if present, else skipped silently); a
+plain-digit ref (task-id shape) warns "unverifiable" (no generic task-queue
+store); a `none <text>` glued value warns of the likely --why concatenation
+bug in the caller.
 """
 import sys, os, json, argparse, hashlib, re, datetime, subprocess, shlex
 
@@ -63,6 +68,24 @@ def git_root(start):
 
 def slug(s, n=40):
     return (re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")[:n] or "rec")
+
+
+def _validate_gotcha_ref(ri):
+    """ADR-0031 warn-only check (never blocks the write): an opaque gotcha-id ref is looked
+    up against the gotchas TSV (id = first column) named by $DRAILLE_GOTCHAS_TSV, else
+    ~/workspace-os/system/gotchas.tsv. Neither present -> skip silently: that convention is
+    workspace-os-specific, not part of draille's own (generic, any-runtime) data model."""
+    tsv = os.environ.get("DRAILLE_GOTCHAS_TSV") or os.path.expanduser("~/workspace-os/system/gotchas.tsv")
+    if not os.path.isfile(tsv):
+        return
+    try:
+        with open(tsv, encoding="utf-8") as f:
+            ids = {ln.split("\t", 1)[0] for ln in f if ln.strip() and not ln.startswith("#")}
+    except OSError:
+        return
+    if ri not in ids:
+        sys.stderr.write("warn: --remedy-impl %r not found in gotchas TSV (%s) -- unverifiable ref\n"
+                          % (ri, tsv))
 
 
 def remedy_hook_ref(root, rid, title, scope):
@@ -223,6 +246,14 @@ def main(argv):
         a.remedy_why = a.remedy_why.replace("\r", " ").replace("\n", " ")
         if ri == "none":
             remedy_impl_val, remedy_why_val = "none", a.remedy_why
+        elif ri and ri.startswith("none "):
+            # checked before path/opaque-ref detection so a glued "none <why text>" can't be
+            # misread as a path just because the why text happens to contain a '/'
+            remedy_impl_val = ri
+            sys.stderr.write(
+                "warn: --remedy-impl %r looks like 'none' and --why glued together by the "
+                "caller (a CLI concatenation bug, not an opaque ref) -- pass --remedy-impl "
+                "none --why TEXT as two separate flags\n" % ri)
         elif ri and (ri.startswith("~") or "/" in ri):
             # Anchor relative paths on the memory root, not the process CWD: a
             # repo-relative path (e.g. "system/foo.md") is only CWD-valid when
@@ -248,7 +279,15 @@ def main(argv):
                     "warn: --remedy-impl path %r not found (checked %s) -> treated as absent\n"
                     % (ri, ", ".join(repr(c) for c in candidates)))
         elif ri:
-            remedy_impl_val = ri  # opaque id (gotcha/task ref) — accepted verbatim
+            remedy_impl_val = ri  # opaque id (gotcha/task ref) — accepted verbatim, never blocks
+            if ri.isdigit():
+                # a plain integer reads as a task-id (e.g. wsos-loop's queue.db row id), but
+                # draille has no generic/standard task-queue path to check it against.
+                sys.stderr.write(
+                    "warn: --remedy-impl %r looks like a task-id but draille has no standard "
+                    "task-queue store configured -- unverifiable ref\n" % ri)
+            else:
+                _validate_gotcha_ref(ri)
         if remedy_impl_val is None:
             remedy_impl_val = remedy_hook_ref(root, rid, title, scope)
             sys.stderr.write(

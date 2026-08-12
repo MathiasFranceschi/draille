@@ -5,8 +5,9 @@ For each record, counts query tokens (lowercased) in title (x3), summary (x2),
 and body (x1). A record with zero token matches is excluded outright (its
 classification/outcome weight never rescues it into the results). Surviving
 records add a classification weight (foundational 5 / tactical 2 /
-observational 1) and an outcomes tally (+2 success, -1 failure, from
-outcomes.jsonl, same join-by-id contract as prime.py). Records superseded by
+observational 1) and a decayed/capped outcomes score (+2 success, -1 failure,
+from outcomes.jsonl, same join-by-id contract as prime.py — see decay/cap
+note below). Records superseded by
 another live record (`supersedes: <id>` in its frontmatter) are hidden by
 default; pass --all/--include-superseded to reinclude them.
 
@@ -19,11 +20,22 @@ D/outcomes.jsonl. Invalid frontmatter is quarantined (stderr), never halts.
 BYO backend: if $DRAILLE_SEARCH_CMD is set (and neither --engine builtin nor
 --dir is passed), delegates to it instead of scanning — see docs/backends.md.
 
+Outcome-score decay/cap: same mechanism and knobs as prime.py (011c2d4) — a
+success/failure event's weight decays with age (half-life
+DRAILLE_PRIME_HALF_LIFE_DAYS, default 45 days) and success credits are capped
+at DRAILLE_PRIME_MAX_SUCCESS_CREDITS (default 3, most-recent first), instead
+of the flat, unlimited +2/success bonus this file used to add. One shared
+popularity-decay behavior for both ranking tools, not a per-tool setting —
+search.py keeps its own point scale (+2/-1) on top of it.
+
 Usage: search.py <term> [term ...] [-n N] [--dir MEMORY_DIR] [--engine builtin|env]
 """
-import sys, os, glob, json, argparse, shlex, subprocess
+import sys, os, glob, json, argparse, shlex, subprocess, datetime
 
 CLASS_BONUS = {"foundational": 5, "tactical": 2, "observational": 1}
+HALF_LIFE_DAYS = float(os.environ.get("DRAILLE_PRIME_HALF_LIFE_DAYS", "45"))
+MAX_SUCCESS_CREDITS = int(os.environ.get("DRAILLE_PRIME_MAX_SUCCESS_CREDITS", "3"))
+SUCCESS_PTS, FAILURE_PTS = 2, 1  # search.py's own scale (unchanged) — decay/cap wraps around it
 
 
 def memory_root():
@@ -81,9 +93,12 @@ def load_records(records_dir):
 
 
 def load_outcomes(path):
-    tally = {}
+    """id -> list of (status, date_str) events (not an aggregated tally, unlike this
+    function's pre-011c2d4-port shape) — outcome_component() decays each event by its own
+    date, same per-event contract as prime.py's load_outcomes."""
+    events = {}
     if not os.path.exists(path):
-        return tally
+        return events
     with open(path, encoding="utf-8") as f:
         for ln in f:
             ln = ln.strip()
@@ -94,12 +109,36 @@ def load_outcomes(path):
             except Exception:                        # GUARD: skip malformed line, never crash
                 continue
             rid, st = o.get("id"), o.get("status")
-            if not rid:
+            if not rid or st not in ("success", "failure", "partial"):
                 continue
-            t = tally.setdefault(rid, {"success": 0, "failure": 0, "partial": 0})
-            if st in t:
-                t[st] += 1
-    return tally
+            events.setdefault(rid, []).append((st, o.get("date", "")))
+    return events
+
+
+def _age_days(date_str, today):
+    try:
+        d = datetime.date.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        return 0.0                                    # unparseable/missing date -> treat as fresh
+    return max(0.0, (today - d).days)
+
+
+def _decay(date_str, today):
+    if HALF_LIFE_DAYS <= 0:
+        return 1.0
+    return 0.5 ** (_age_days(date_str, today) / HALF_LIFE_DAYS)
+
+
+def outcome_component(rid, events, today):
+    """Decayed, capped outcome score — same mechanism as prime.py's outcome_component, scaled
+    to search.py's own SUCCESS_PTS/FAILURE_PTS instead of prime's 30/20. At most
+    MAX_SUCCESS_CREDITS successes count (most-recent first); failures are uncapped (a safety
+    signal) but still decay."""
+    evs = events.get(rid, [])
+    successes = sorted((d for st, d in evs if st == "success"), reverse=True)[:MAX_SUCCESS_CREDITS]
+    failures = [d for st, d in evs if st == "failure"]
+    return (sum(_decay(d, today) for d in successes) * SUCCESS_PTS
+            - sum(_decay(d, today) for d in failures) * FAILURE_PTS)
 
 
 def text_score(rec, tokens):
@@ -110,14 +149,13 @@ def text_score(rec, tokens):
     return s
 
 
-def score(rec, tokens, tally):
+def score(rec, tokens, events, today):
     """(text_score, total_score). Caller drops records whose text_score is 0."""
     ts = text_score(rec, tokens)
     if ts == 0:
         return 0, 0
-    t = tally.get(rec.get("id"), {})
     total = ts + CLASS_BONUS.get(rec.get("classification", "observational"), 1) \
-        + t.get("success", 0) * 2 - t.get("failure", 0) * 1
+        + outcome_component(rec.get("id"), events, today)
     return ts, total
 
 
@@ -172,7 +210,8 @@ def main(argv):
     for d in record_dirs:
         r, _ = load_records(d)
         recs += r
-    tally = load_outcomes(outcomes_path)
+    events = load_outcomes(outcomes_path)
+    today = datetime.date.today()
 
     # Obsolescence by supersession (same contract as prime.py): hide any record whose id is
     # named by another live record's `supersedes` — unless --all/--include-superseded.
@@ -182,7 +221,7 @@ def main(argv):
 
     hits = []
     for rec in recs:
-        ts, total = score(rec, tokens, tally)
+        ts, total = score(rec, tokens, events, today)
         if ts == 0:
             continue
         hits.append((total, rec))

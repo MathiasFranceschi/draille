@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.6.1] - 2026-08-12
 
 ### Changed
 
@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runaway popularity signal. The digest's `★N` count is unaffected: it still
   shows the raw, uncapped, undecayed success total as a human-transparency
   counter separate from the ranking score.
+- `search.py` outcome scoring: ported the same decay/cap mechanism (same
+  `DRAILLE_PRIME_HALF_LIFE_DAYS`/`DRAILLE_PRIME_MAX_SUCCESS_CREDITS` knobs —
+  one shared popularity-decay behavior, not a per-tool setting) onto its own
+  `+2 success / -1 failure` scale. It previously added that bonus flat and
+  uncapped, same runaway-popularity bug as `prime.py` pre-decay.
+- `record.py` `--remedy-impl`: an opaque ref is now warn-only validated
+  (ADR-0031 — never blocks the write). A gotcha-id is looked up in the TSV
+  named by `$DRAILLE_GOTCHAS_TSV` (default `~/workspace-os/system/gotchas.tsv`
+  if present, else skipped silently — the package stays generic); a
+  plain-digit ref (task-id shape) warns "unverifiable" (no generic
+  task-queue store to check it against); a `none <text>` value warns of the
+  likely `--why` CLI-concatenation bug in the caller.
 
 ### Added
 
