@@ -10,6 +10,9 @@ Root resolution: $MEMORY_ROOT env var, else the git root of the cwd, else cwd.
 Scope routing: if <root>/memory/scopes.json exists (multi-scope mode), --scope
 is required and maps to a home dir; otherwise (mono-project mode) records land
 in <root>/memory/records and --scope defaults to the root's basename.
+A scope that misses a key is slug-normalized once and retried ("Studio_Azur" ->
+"studio-azur"), adopting the canonical key; still no match -> exit 2 listing the
+declared scopes (never a silent park, see the fail-closed note in main()).
 Dynamic routing: if scopes.json has a top-level "_resolver" command string,
 each scope's value is resolved by running `<_resolver> <value>` (single-line
 stdout, abs path ok) instead of used as a literal path; a failing/empty/
@@ -144,7 +147,7 @@ def main(argv):
         base, scope = dir_override, (scope or "project")
     elif os.path.exists(scopes_path):
         # multi-scope mode: scopes.json maps scope -> home dir (relative to root).
-        # An unknown scope parks in "central" + warns (a flat dump can't recur silently).
+        # An unknown scope blocks the write (see the fail-closed note below).
         try:
             with open(scopes_path, encoding="utf-8") as f:
                 homes = json.load(f)
@@ -156,9 +159,31 @@ def main(argv):
             return 2
         # "_resolver" is a reserved config key (see below), never a usable scope name
         home_dir = homes.get(scope) if scope != "_resolver" else None
+        if home_dir is None and scope != "_resolver":
+            # A scope is a KEY, not a vault directory name. Callers (LLM agents included)
+            # reach for the directory they can see — "Studio_Azur", "RT2i", "immobilier" —
+            # and miss the key ("studio-azur", "rt2i"). Normalize once with the same slug
+            # used for ids, and ADOPT the canonical key: leaving `scope:` as typed while
+            # routing on the alias would write a frontmatter/home pair nothing re-reads.
+            alias = slug(scope, len(scope))
+            if alias != scope:
+                home_dir = homes.get(alias)
+                if home_dir is not None:
+                    sys.stderr.write("note: scope %r -> %r (canonical key in scopes.json)\n"
+                                     % (scope, alias))
+                    scope = alias
         if home_dir is None:
-            sys.stderr.write("warn: scope %r has no home in scopes.json -> parked in central\n" % scope)
-            home_dir = homes.get("central", ".")
+            # Fail closed. This used to park in "central" with a stderr warn and exit 0 —
+            # so an undeclared scope read as a success to every caller and the record piled
+            # up in the wrong home, invisible (nothing ever compares `scope:` against the
+            # directory the file sits in). Measured 2026-08-14 on the wsos vault: 23 records
+            # misparked over ~3 months. An undeclared scope is a usage error, the same class
+            # as "--remedy-impl none with no --why" above — not a content refusal (ADR-0031).
+            known = ", ".join(sorted(k for k in homes if k != "_resolver"))
+            sys.stderr.write(
+                "error: scope %r has no home in scopes.json -- declare it there, or use one "
+                "of: %s\n" % (scope, known))
+            return 2
         # Dynamic routing: "_resolver" (a command string) turns the scope's value
         # (above, a topic NAME rather than a literal path) into an absolute dir by
         # running `<_resolver> <value>` — never fall back to the literal value on

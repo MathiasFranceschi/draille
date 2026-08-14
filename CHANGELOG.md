@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-08-14
+
+### Changed
+
+- **Breaking:** `record.py` — an unknown `--scope` no longer parks the record in
+  `central` with a stderr warn and exit 0. It is now fail-closed: exit 2, with
+  a message listing the scopes declared in `scopes.json`. A scope is a KEY of
+  `scopes.json`, not the vault directory name the caller sees — callers (LLM
+  agents included) reach for the directory ("Studio_Azur", "RT2i") and miss the
+  key ("studio-azur", "rt2i"); parking-and-succeeding meant the record landed
+  in the wrong home, invisible to `prime --scope`, with nothing ever comparing
+  `scope:` against the directory it sat in. Measured on the wsos vault
+  2026-08-14: 23 records misparked over ~3 months. Before an unknown scope is
+  rejected, it is slug-normalized once and retried against the same casing
+  used for ids ("Studio_Azur" -> "studio-azur"); on a hit the canonical key is
+  adopted (`scope:` in the frontmatter, not the alias as typed) so the
+  routing and the written record agree. Any caller that relied on the old
+  park-in-central-and-succeed behavior (e.g. a subprocess wrapper that never
+  checked the exit code) now sees a hard failure — declare the scope in
+  `scopes.json`, or pass one already declared.
+
 ## [1.7.0] - 2026-08-12
 
 ### Added
