@@ -64,12 +64,12 @@ with tempfile.TemporaryDirectory() as tmp:
         txt = open(os.path.join(rdir, files[0])).read()
         ok(("scope: " + os.path.basename(tmp)) in txt, "ascension: scope = basename of the ascended root")
 
-# --- multi-scope mode: scopes.json present -> --scope required, unknown scope parked + warned ---
+# --- multi-scope mode: scopes.json present -> --scope required, unknown scope BLOCKS ---
 with tempfile.TemporaryDirectory() as tmp:
     env = env_for(tmp)
     os.makedirs(os.path.join(tmp, "memory"), exist_ok=True)
     with open(os.path.join(tmp, "memory", "scopes.json"), "w") as f:
-        json.dump({"sport": "vault/sport", "central": "."}, f)
+        json.dump({"sport": "vault/sport", "studio-azur": "vault/sa", "central": "."}, f)
 
     rn = run([REC, "decision", "tactical", "needs a scope"], env)
     ok(rn.returncode == 2, "multi-scope: --scope required (exit 2 without it)")
@@ -81,13 +81,28 @@ with tempfile.TemporaryDirectory() as tmp:
     ok(os.path.isdir(sdir) and any(sid in x for x in os.listdir(sdir)),
        "multi-scope: known scope routed to its home dir")
 
+    # fail-closed: an undeclared scope used to park in "central" at exit 0, so it read as a
+    # success and the record silently landed in the wrong home (23 such records on the wsos
+    # vault, 2026-08-14). Nothing may be written, and the error must name the real scopes.
     ru = run([REC, "pattern", "tactical", "unknown scope rec", "--scope", "ghost"], env)
-    ok(ru.returncode == 0, "multi-scope: unknown scope still succeeds (parked, not fatal)")
-    ok("warn" in ru.stderr and "ghost" in ru.stderr, "multi-scope: unknown scope warns on stderr")
-    uid = ru.stdout.strip()
+    ok(ru.returncode == 2, "multi-scope: undeclared scope -> exit 2 (no silent park)")
+    ok("error" in ru.stderr and "ghost" in ru.stderr, "multi-scope: undeclared scope errors on stderr")
+    ok("sport" in ru.stderr and "studio-azur" in ru.stderr,
+       "multi-scope: error lists the declared scopes (self-heal hint for the caller)")
     cdir = os.path.join(tmp, "memory", "records")  # central = "." per scopes.json
-    ok(os.path.isdir(cdir) and any(uid in x for x in os.listdir(cdir)),
-       "multi-scope: unknown scope parked in the 'central' home")
+    ok(not os.path.isdir(cdir) or not os.listdir(cdir),
+       "multi-scope: nothing written to the 'central' home")
+
+    # normalization: the caller reaches for the vault DIRECTORY name, not the key
+    ra = run([REC, "pattern", "tactical", "aliased scope rec", "--scope", "Studio_Azur"], env)
+    ok(ra.returncode == 0, "alias: 'Studio_Azur' resolves via slug-normalized key 'studio-azur'")
+    aid = ra.stdout.strip()
+    adir = os.path.join(tmp, "vault", "sa", "memory", "records")
+    ok(os.path.isdir(adir) and any(aid in x for x in os.listdir(adir)),
+       "alias: record routed to the canonical key's home dir")
+    atxt = open(os.path.join(adir, [x for x in os.listdir(adir) if aid in x][0])).read()
+    ok("scope: studio-azur" in atxt,
+       "alias: frontmatter carries the CANONICAL key, not the name as typed")
 
 # --- security: multi-line title neutralized (frontmatter is line-based -> injection/quarantine) ---
 with tempfile.TemporaryDirectory() as tmp:
@@ -115,8 +130,10 @@ with tempfile.TemporaryDirectory() as tmp:
     r1 = run([REC, "decision", "tactical", "traversal rec", "--scope", "sport"], env)
     ok(r1.returncode == 2, "security: '..' home in scopes.json -> exit 2")
     ok(not os.path.exists(os.path.join(tmp, "outside")), "security: nothing written outside root")
-    r2 = run([REC, "decision", "tactical", "abs rec", "--scope", "ghost"], env)  # parks in central
-    ok(r2.returncode == 2, "security: absolute home (via central park) -> exit 2")
+    # "central" declared explicitly: an undeclared scope now blocks earlier (fail-closed), so
+    # it would exit 2 for the WRONG reason and stop covering the containment guard.
+    r2 = run([REC, "decision", "tactical", "abs rec", "--scope", "central"], env)
+    ok(r2.returncode == 2, "security: absolute home -> exit 2")
     r3 = run([REC, "decision", "tactical", "rooted rec", "--scope", "rooted"], env)
     ok(r3.returncode == 2, "security: rooted-no-drive home '/esc' -> exit 2 (Windows isabs blind spot)")
 

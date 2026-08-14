@@ -33,6 +33,13 @@ Plain-markdown durable memory for AI agents. Four stdlib-only tools in
   the root being listed in `~/.config/draille/trusted-roots` (untrusted
   scopes.json must never gain command execution), and any resolution failure
   blocks the write (exit 2, no literal fallback). See CHANGELOG 1.6.0.
+  A scope missing its key is slug-normalized once and retried, adopting the
+  canonical key (`Studio_Azur` → `studio-azur`) — a scope is a KEY, not the
+  vault directory name callers can see. Still unmatched → **exit 2** listing
+  the declared scopes. It never parks in `central`: that was warn-only at
+  exit 0, so 23 records piled up in the wrong home over 3 months while every
+  caller read a success (nothing ever compares `scope:` to the directory the
+  file sits in). Record `scopes-json-parkait-tout-1a3534`.
 - **Append-only outcomes**, keyed by immutable id. Git is the WORM/recovery
   layer. Never rewrite records in place except by the same id (idempotence).
 
