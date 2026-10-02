@@ -29,8 +29,9 @@ Usage: record.py <type> <classification> <title> [--scope S] [--body TEXT] [--ev
 gotcha/task ref. A relative path is resolved against the memory root AND (when
 different — e.g. MEMORY_ROOT points at a vault while cwd sits in a code repo)
 the git root of the process cwd, so a repo-relative remedy resolves whichever
-side it lives on. Omitted or an invalid path -> <root>/memory/remedy-task-hook,
-else 'todo'. An opaque ref is warn-only validated, never blocking: a gotcha-id
+side it lives on. Omitted or an invalid path -> 'todo' (aucun hook ne fabrique plus de
+ref pour vous — retiré le 2026-10-02, cf. queue #230). An opaque ref is warn-only
+validated, never blocking: a gotcha-id
 is looked up in the TSV named by $DRAILLE_GOTCHAS_TSV (default
 ~/workspace-os/system/gotchas.tsv if present, else skipped silently); a
 plain-digit ref (task-id shape) warns "unverifiable" (no generic task-queue
@@ -91,19 +92,13 @@ def _validate_gotcha_ref(ri):
                           % (ri, tsv))
 
 
-def remedy_hook_ref(root, rid, title, scope):
-    """ADR-0031: no valid --remedy-impl -> ask <root>/memory/remedy-task-hook to make one.
-    Absent/non-executable/failing/silent hook -> 'todo' (never blocks the write)."""
-    hook = os.path.join(root, "memory", "remedy-task-hook")
-    if os.path.isfile(hook) and os.access(hook, os.X_OK):
-        try:
-            r = subprocess.run([hook, rid, title, scope], capture_output=True, text=True, timeout=20)
-            for line in (r.stdout or "").splitlines():
-                if line.strip():
-                    return line.strip()
-        except Exception:
-            pass
-    return "todo"
+# Pas de `remedy_hook_ref` : ADR-0031 mvt 3 confiait à un hook externe
+# (`<root>/memory/remedy-task-hook`) la fabrication d'un ref quand aucun `--remedy-impl`
+# valide n'était fourni. Mesuré : ce hook ne pouvait RIEN dimensionner (record.py ne lui
+# passe que rid/titre/scope, et il est appelé AVANT l'écriture de la fiche), donc il
+# fabriquait un ref opaque par construction — 52 tâches dans une file que rien ne draine
+# au 2026-10-02. Le contrat est inversé (queue #230) : un ref non fourni vaut `todo`,
+# qui a un sens documenté (« un défaut à corriger dans le tour ») et n'invente rien.
 
 
 def main(argv):
@@ -262,7 +257,9 @@ def main(argv):
     rid = "%s-%s" % (slug(title, 24), hashlib.sha1((title + body).encode()).hexdigest()[:6])
     # ADR-0031 mvt 3: failure/convention always gets a remedy_impl pointer — 'none'+why,
     # a verified path, an opaque ref (gotcha/task id) verbatim, or (ABSENT: no flag, or an
-    # invalid path) the remedy-task-hook / 'todo' fallback. Never gates the write itself.
+    # invalid path) plain 'todo'. Never gates the write itself. Le 'todo' n'est plus le
+    # repli d'un hook (retiré 2026-10-02) : c'est la réponse DIRECTE du producteur, et il
+    # ne ment pas — le hook, lui, rendait un `task:<N>` fabriqué quoi qu'il arrive.
     remedy_impl_val = remedy_why_val = None
     if typ in ("failure", "convention"):
         # frontmatter is line-based — same injection guard as title (a newline in the
@@ -314,7 +311,7 @@ def main(argv):
             else:
                 _validate_gotcha_ref(ri)
         if remedy_impl_val is None:
-            remedy_impl_val = remedy_hook_ref(root, rid, title, scope)
+            remedy_impl_val = "todo"
             sys.stderr.write(
                 "⚠ remède non câblé — remedy_impl: %s (record %s). "
                 "Câbler = code/gotcha row, le record n'est qu'un pointeur (ADR-0031).\n"

@@ -197,17 +197,21 @@ with tempfile.TemporaryDirectory() as tmp:
 with tempfile.TemporaryDirectory() as tmp:
     env = env_for(tmp)
 
-    # (a) failure, no flag, no hook -> remedy_impl: todo
-    r = run([REC, "failure", "tactical", "no hook no flag"], env)
-    ok(r.returncode == 0, "remedy: (a) failure no hook/flag exit 0")
+    # (a) failure, no flag -> remedy_impl: todo
+    r = run([REC, "failure", "tactical", "no flag"], env)
+    ok(r.returncode == 0, "remedy: (a) failure no flag exit 0")
     rid = r.stdout.strip()
     rdir = os.path.join(tmp, "memory", "records")
     f = [x for x in os.listdir(rdir) if rid in x][0]
     txt = open(os.path.join(rdir, f)).read()
-    ok("remedy_impl: todo" in txt, "remedy: (a) absent + no hook -> todo")
+    ok("remedy_impl: todo" in txt, "remedy: (a) absent -> todo")
     ok("remède non câblé" in r.stderr, "remedy: (a) noisy stderr warning present")
 
-    # (b) failure, hook prints task:42 -> remedy_impl: task:42
+    # (b) CONTRAT INVERSÉ (2026-10-02, queue #230) : un hook présent et BAVARD est IGNORÉ.
+    # Le hook ne pouvait rien dimensionner (appelé avant l'écriture de la fiche, avec
+    # rid/titre/scope seuls) : il fabriquait un ref opaque par construction, 52 tâches dans
+    # une file que rien ne draine. Contre-preuve : sur le code d'avant, ce cas rend
+    # `task:42` et ROUGIT ici — c'est ce qui en fait le test de la suppression.
     hookdir = os.path.join(tmp, "memory")
     os.makedirs(hookdir, exist_ok=True)
     hook = os.path.join(hookdir, "remedy-task-hook")
@@ -215,21 +219,11 @@ with tempfile.TemporaryDirectory() as tmp:
         hf.write("#!/bin/sh\necho task:42\n")
     os.chmod(hook, 0o755)
     r = run([REC, "failure", "tactical", "with hook"], env)
+    ok(r.returncode == 0, "remedy: (b) hook present -> record still written")
     rid = r.stdout.strip()
     f = [x for x in os.listdir(rdir) if rid in x][0]
     txt = open(os.path.join(rdir, f)).read()
-    ok("remedy_impl: task:42" in txt, "remedy: (b) hook stdout -> remedy_impl ref")
-
-    # (c) hook exits 1 -> todo, record still written
-    with open(hook, "w") as hf:
-        hf.write("#!/bin/sh\nexit 1\n")
-    os.chmod(hook, 0o755)
-    r = run([REC, "failure", "tactical", "hook fails"], env)
-    ok(r.returncode == 0, "remedy: (c) hook exit 1 -> record still written (never refused)")
-    rid = r.stdout.strip()
-    f = [x for x in os.listdir(rdir) if rid in x][0]
-    txt = open(os.path.join(rdir, f)).read()
-    ok("remedy_impl: todo" in txt, "remedy: (c) failing hook -> todo")
+    ok("remedy_impl: todo" in txt, "remedy: (b) hook stdout IGNORED -> todo, pas task:42")
     os.remove(hook)  # done with the fake hook
 
     # (d) --remedy-impl none without --why -> exit 2, nothing written

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-10-02
+
+### Removed
+
+- **Breaking:** `record.py` no longer calls `memory/remedy-task-hook` when a
+  `failure`/`convention` record carries no valid `--remedy-impl`. The
+  indirection could not size a remedy — the hook runs BEFORE the record file
+  exists and receives only `rid`/`title`/`scope` — so it minted an opaque ref
+  (`task:<N>`) on every un-dimensioned record instead of reporting that none
+  was given. `remedy_impl: todo` is now the direct answer, and `todo` already
+  means "a defect to fix in the turn". A hook left on disk is ignored; nothing
+  to migrate. Removes the `remedy_hook_ref` helper.
+
 ## [1.8.0] - 2026-08-14
 
 ### Changed

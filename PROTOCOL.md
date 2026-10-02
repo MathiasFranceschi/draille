@@ -114,10 +114,12 @@ ranks and still surfaces; don't rely on it.
 done when it's written — it's done when the remedy is wired. `record` enforces
 this as a structural default, never a gate: pass `--remedy-impl <path>` (a
 verified file), an opaque ref (a gotcha/task id), or `none --why "<reason>"`
-(explicitly nothing to wire). Omit it and the store's
-`memory/remedy-task-hook` (an executable you provide — it should create a task
-in whatever tracker you use and print its ref) is called to file the debt in
-the same gesture; no hook means `remedy_impl: todo` and a loud stderr warning.
+(explicitly nothing to wire). Omit it and `record` writes `remedy_impl: todo`
+plus a loud stderr warning. No hook fabricates a ref for you: the
+`memory/remedy-task-hook` indirection was removed on 2026-10-02. It could not
+size anything — it is called before the record file exists and receives only
+`rid`/`title`/`scope` — so it minted an opaque ref on every un-dimensioned
+record instead of saying so, and fed a queue nothing drained.
 The write itself always succeeds — a refusal would only teach an agent caller
 to game the field.
 
