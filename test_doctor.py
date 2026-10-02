@@ -70,6 +70,31 @@ def dangling_supersedes():
         ok("a -> GONE" in r.stdout, "AC4: dangling supersedes pair listed")
 
 
+def dead_supersede_chain():
+    """AC5 (2026-10-02) — A enterré par B, B enterré par C : A est caché par un record
+    lui-même caché, donc sa retraite repose sur un mort et il ne reviendra JAMAIS — sans
+    que rien ne le dise (cas réel : une thèse vraie restée invisible parce que son
+    correcteur, faux, avait été enterré le même jour). Le doctor doit le NOMMER."""
+    with tempfile.TemporaryDirectory() as tmp:
+        rdir = os.path.join(tmp, "records")
+        os.makedirs(rdir)
+        rec(rdir, "a", "id: a\ntype: decision\nclassification: foundational\nsummary: A")
+        rec(rdir, "b", "id: b\ntype: failure\nclassification: tactical\nsummary: B\nsupersedes: a")
+        rec(rdir, "c", "id: c\ntype: decision\nclassification: foundational\nsummary: C\nsupersedes: b")
+
+        r = subprocess.run([sys.executable, DOCTOR, "--dir", tmp], capture_output=True, text=True)
+        ok(r.returncode == 1, "AC5: chaîne morte -> exit 1")
+        ok("a <- b" in r.stdout, "AC5: la chaîne morte est nommée (a <- b)")
+        ok("dead supersede chains" in r.stdout, "AC5: libellé de la section rendu")
+
+        # CONTRE-ÉPREUVE du discriminant : si C n'existe pas, b n'est PAS caché -> a est
+        # caché par un record VIVANT, la chaîne est saine et le doctor ne doit rien dire.
+        os.remove(os.path.join(rdir, [f for f in os.listdir(rdir) if "c" in f][0]))
+        r = subprocess.run([sys.executable, DOCTOR, "--dir", tmp], capture_output=True, text=True)
+        ok("dead supersede chains" not in r.stdout,
+           "AC5: pas de faux positif quand l'enterreur est vivant")
+
+
 def json_output():
     with tempfile.TemporaryDirectory() as tmp:
         rdir = os.path.join(tmp, "records")
@@ -154,6 +179,7 @@ healthy_store()
 quarantined_record()
 orphan_outcome()
 dangling_supersedes()
+dead_supersede_chain()
 json_output()
 duplicate_ids()
 cross_scope_duplicate_ids()

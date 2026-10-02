@@ -162,6 +162,24 @@ def main(argv):
             if sid and sid not in ids:
                 dangling.append((meta["id"], sid, path))
 
+    # Chaîne de supersession MORTE (2026-10-02). `prime.py`/`search.py` filtrent sur
+    # l'ENSEMBLE des records sans récursion (et l'assument en commentaire), donc un
+    # record caché par un record LUI-MÊME caché reste caché pour toujours — sans le
+    # moindre signal. Mesuré : une thèse VRAIE, confirmée par la mesure finale, est
+    # restée invisible parce que son correcteur (FAUX) avait été enterré le même jour.
+    # On NOMME la chaîne ; on ne la défait pas — savoir lequel des deux records est vrai
+    # se tranche à la main, pas ici.
+    by_sup = {}
+    for meta, _p in recs:
+        for sid in (s.strip() for s in meta.get("supersedes", "").split(",")):
+            if sid:
+                by_sup.setdefault(sid, []).append(meta["id"])
+    hidden = set(by_sup)
+    dead_chains = sorted(
+        (x, by_sup[x]) for x in hidden
+        if all(h in hidden for h in by_sup[x])          # tous ses enterreurs sont enterrés
+    )
+
     scopes = None if dir_override else check_scopes(root)
 
     report = {
@@ -170,13 +188,15 @@ def main(argv):
         "quarantined": sorted(quarantined),
         "orphan_outcomes": orphan_outcomes,
         "dangling_supersedes": ["%s -> %s" % (rid, sid) for rid, sid, _p in dangling],
+        "dead_supersede_chains": ["%s <- %s" % (x, ", ".join(hs)) for x, hs in dead_chains],
         "invalid_scopes": (scopes or {}).get("invalid", []) if scopes else [],
         "scopes_error": (scopes or {}).get("error") if scopes else None,
         "duplicate_ids": ["%s (%s, %s)" % (rid, os.path.basename(p1), os.path.basename(p2))
                           for rid, p1, p2 in dups],
     }
     issues = (len(report["quarantined"]) + len(report["orphan_outcomes"])
-              + len(report["dangling_supersedes"]) + len(report["invalid_scopes"])
+              + len(report["dangling_supersedes"]) + len(report["dead_supersede_chains"])
+              + len(report["invalid_scopes"])
               + len(report["duplicate_ids"]) + (1 if report["scopes_error"] else 0))
 
     if a.json:
@@ -191,6 +211,9 @@ def main(argv):
         lines.append("  orphan outcomes (%d): %s" % (len(report["orphan_outcomes"]), ", ".join(report["orphan_outcomes"])))
     if report["dangling_supersedes"]:
         lines.append("  dangling supersedes (%d): %s" % (len(report["dangling_supersedes"]), ", ".join(report["dangling_supersedes"])))
+    if report["dead_supersede_chains"]:
+        lines.append("  dead supersede chains (%d): %s — un record caché par un record lui-même caché ne revient jamais"
+                     % (len(report["dead_supersede_chains"]), ", ".join(report["dead_supersede_chains"])))
     if report["scopes_error"]:
         lines.append("  scopes.json: %s" % report["scopes_error"])
     if report["invalid_scopes"]:
