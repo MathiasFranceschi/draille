@@ -302,6 +302,46 @@ with tempfile.TemporaryDirectory() as tmp:
     ok("remedy_impl: system/scripts/fix.sh" in txt,
        "remedy: (i) repo-relative remedy resolved against cwd's git root, not just MEMORY_ROOT")
 
+# (m) un remède PRÉSENT mais non commité : le vault annoncerait un correctif que la machine
+# n'a pas (record un-remedy-impl-flipp-d-s-1666cf). Warn-only, jamais bloquant.
+with tempfile.TemporaryDirectory() as tmp:
+    vault = os.path.join(tmp, "vault")
+    os.makedirs(vault, exist_ok=True)
+    env = env_for(vault)
+    repo = os.path.join(tmp, "code-repo")
+    os.makedirs(repo, exist_ok=True)
+    for cmd in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
+        subprocess.run(["git", "-C", repo] + cmd, capture_output=True, check=True)
+    os.makedirs(os.path.join(repo, "system"), exist_ok=True)
+
+    # (m1) committé -> silence (le cas normal, et la contre-épreuve du discriminant)
+    p = os.path.join(repo, "system", "livre.sh")
+    open(p, "w").write("#!/bin/sh\n")
+    subprocess.run(["git", "-C", repo, "add", "system/livre.sh"], capture_output=True, check=True)
+    subprocess.run(["git", "-C", repo, "commit", "-qm", "x"], capture_output=True, check=True)
+    r = run([REC, "failure", "tactical", "remedy committed", "--remedy-impl",
+             "system/livre.sh"], env, cwd=repo)
+    ok(r.returncode == 0, "remedy: (m1) remède à HEAD -> exit 0")
+    ok("PAS à HEAD" not in r.stderr, "remedy: (m1) remède committé -> aucun avertissement")
+
+    # (m2) CONTRE-ÉPREUVE du périmètre : un fichier SUIVI et modifié non commité ne
+    # déclenche RIEN. C'est le geste normal du tour — on édite le garde, on écrit le
+    # record qui le cite, on commite ensuite ; avertir ici ferait sortir l'avertissement
+    # sur la majorité des records `failure` légitimes, donc ne dirait plus rien.
+    # Le cas visé par le record est le fichier ABSENT de HEAD (branche/worktree), pas
+    # la ligne pas encore écrite.
+    open(p, "w").write("#!/bin/sh\n# fix pas encore commité\n")
+    r = run([REC, "failure", "tactical", "remedy modified", "--remedy-impl",
+             "system/livre.sh"], env, cwd=repo)
+    ok("PAS à HEAD" not in r.stderr,
+       "remedy: (m2) fichier suivi modifié -> silence (périmètre volontaire)")
+
+    # (m3) untracked -> même classe
+    open(os.path.join(repo, "system", "neuf.sh"), "w").write("#!/bin/sh\n")
+    r = run([REC, "failure", "tactical", "remedy untracked", "--remedy-impl",
+             "system/neuf.sh"], env, cwd=repo)
+    ok("PAS à HEAD" in r.stderr, "remedy: (m3) remède untracked -> averti")
+
 # (j) opaque gotcha-id ref: warn-only lookup against $DRAILLE_GOTCHAS_TSV (never blocks)
 with tempfile.TemporaryDirectory() as tmp:
     env = env_for(tmp)

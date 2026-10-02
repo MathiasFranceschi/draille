@@ -58,6 +58,43 @@ def memory_root():
         d = parent
 
 
+def warn_if_not_at_head(path, ref):
+    """Warn when `ref` points at a file the working tree has but HEAD does not carry.
+
+    Un fichier PRÉSENT n'est pas un remède LIVRÉ (record
+    `un-remedy-impl-flipp-d-s-1666cf`) : le pipeline taskrunner écrivait le record — et
+    flippait `remedy_impl` — au moment où SA BRANCHE était commitée, pas quand elle était
+    mergée, si bien que le vault annonçait un correctif absent de HEAD. La branche est morte
+    mais le geste reste vivant : on cite un fichier tout juste écrit, pas encore commité.
+    Ne BLOQUE jamais : le vault s'auto-committe toutes les 15 min, donc un remède vault
+    fraîchement écrit sort ici légitimement — c'est un rappel, pas un refus.
+    """
+    if not path:
+        return
+    top = git_root(os.path.dirname(os.path.abspath(path)))
+    if not top:
+        return
+    rel = os.path.relpath(os.path.abspath(path), top)
+    if rel.startswith(".."):
+        return
+    try:
+        # Un `.git` VIDE (fixture de test, worktree en cours de création) n'est pas un
+        # dépôt : sans ce filtre, `cat-file` échoue et on crierait sur un faux positif.
+        if subprocess.run(["git", "-C", top, "rev-parse", "--git-dir"],
+                          capture_output=True).returncode != 0:
+            return
+        r = subprocess.run(["git", "-C", top, "cat-file", "-e", "HEAD:" + rel],
+                           capture_output=True)
+    except OSError:
+        return
+    if r.returncode != 0:
+        sys.stderr.write(
+            "warn: --remedy-impl %r existe dans l'arbre de travail mais PAS à HEAD "
+            "(non commité ou untracked) -> le vault annoncerait un remède que la machine "
+            "n'a pas encore. Commiter, ou citer la tâche (record "
+            "un-remedy-impl-flipp-d-s-1666cf).\n" % ref)
+
+
 def git_root(start):
     """Nearest ancestor of `start` containing .git, else None."""
     d = start
@@ -294,8 +331,10 @@ def main(argv):
                 cwd_root = git_root(os.getcwd())
                 if cwd_root and os.path.realpath(cwd_root) != os.path.realpath(root):
                     candidates.append(os.path.join(cwd_root, expanded))
-            if any(os.path.exists(c) for c in candidates):
+            hit = next((c for c in candidates if os.path.exists(c)), None)
+            if hit:
                 remedy_impl_val = ri
+                warn_if_not_at_head(hit, ri)
             else:
                 sys.stderr.write(
                     "warn: --remedy-impl path %r not found (checked %s) -> treated as absent\n"

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.9.0] - 2026-10-02
 
+### Added
+
+- `record.py` warns when a `--remedy-impl <path>` resolves to a file present in
+  the working tree but **absent from HEAD** (`git cat-file -e HEAD:<path>`) —
+  the branch/worktree case where the vault announces a fix the machine does not
+  have (record `un-remedy-impl-flipp-d-s-1666cf`). A tracked-but-modified file
+  is deliberately silent: citing the guard you just edited is the normal turn.
+  Warn-only, never a refusal.
+
 ### Removed
 
 - **Breaking:** `record.py` no longer calls `memory/remedy-task-hook` when a

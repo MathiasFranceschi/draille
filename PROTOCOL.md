@@ -120,6 +120,12 @@ plus a loud stderr warning. No hook fabricates a ref for you: the
 size anything — it is called before the record file exists and receives only
 `rid`/`title`/`scope` — so it minted an opaque ref on every un-dimensioned
 record instead of saying so, and fed a queue nothing drained.
+A path that exists in the working tree but is **absent from HEAD** draws a
+warning (`warn_if_not_at_head`): a file a branch or worktree has is not a
+remedy the machine has, so the record would announce a fix HEAD does not
+carry. A tracked-but-modified file stays silent — citing the guard you just
+edited is the normal turn, and warning there would fire on most legitimate
+records. Warn-only, like everything else here.
 The write itself always succeeds — a refusal would only teach an agent caller
 to game the field.
 
